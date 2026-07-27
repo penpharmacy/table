@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ะบบคำนวณค่าเวร</title>
+<title>ระบบคำนวณค่าเวร</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#1B2A41;        /* กระดานเวร - น้ำเงินเข้ม */
+    --ink:#1B2A41;
     --ink-soft:#2E4258;
-    --paper:#F7F4EC;       /* กระดาษ/บัตรเวร */
+    --paper:#F7F4EC;
     --paper-dim:#EFEADE;
-    --brass:#C89B4A;       /* ทองเหลือง - ป้ายชื่อ */
+    --brass:#C89B4A;
     --brass-deep:#A87F34;
     --line:#D8D2C2;
     --red:#B5533C;
@@ -125,25 +125,35 @@
   tfoot td{ font-family:'IBM Plex Mono',monospace; font-weight:600; background:#EFEADE; padding:8px 4px; font-size:12px;}
   tfoot td.name-col{ background:#EFEADE; }
 
+  /* ---- Upload Area ---- */
   .upload-box{
     background: var(--paper-dim); border-radius:10px;
     padding:14px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px;
   }
-  /* ปรับแต่งส่วนกล่องวางรูปให้รองรับการคลิก */
   .paste-zone{
-    font-family:'Inter', sans-serif; font-size:14px; text-align:center; color:var(--ink);
+    font-family:'Inter', sans-serif; font-size:15px; text-align:center; color:var(--ink);
     border:2px dashed var(--brass); border-radius:10px; background:#fff;
-    padding:26px 16px; cursor:pointer; outline:none; transition: all .2s ease; line-height:1.6;
+    padding:30px 16px; cursor:pointer; outline:none; transition: all .15s; line-height:1.6;
   }
-  .paste-zone:hover, .paste-zone:focus{ border-color: var(--ink); background:#FBF7EC; border-style:solid; }
-  .paste-zone.drag-over{ border-color: var(--brass-deep); background:#F3E6C4; border-style:solid; transform: scale(1.01); }
-  .paste-zone.paste-active{ border-color: var(--green); background:#E7F1EA; border-style:solid; }
-  
-  .upload-actions{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:center; }
-  .upload-hint{ font-size:12.5px; color:var(--muted); }
-  .upload-status{ font-size:12.5px; color:var(--muted); font-family:'IBM Plex Mono',monospace; min-height:16px; }
+  .paste-zone:hover{ border-color: var(--ink); background:#FBF7EC; border-style:solid; }
+  .paste-zone.drag-over{ border-color: var(--brass-deep); background:#F3E6C4; border-style:solid; }
+  .paste-zone.paste-active{ border-color: var(--green); background:#E7F1EA; border-style:solid; transform: scale(0.99); }
+  .upload-actions{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:space-between; padding: 0 4px;}
+  .upload-hint{ font-size:13px; color:var(--muted); }
+  .upload-status{ font-size:13px; color:var(--muted); font-family:'IBM Plex Mono',monospace; font-weight: 500; }
   .upload-status.err{ color:var(--red); }
   .upload-status.ok{ color:var(--green); }
+  .loading-indicator {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--brass);
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
 
   .legend{ display:flex; gap:14px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--muted); }
   .legend span{ display:inline-flex; align-items:center; gap:6px; }
@@ -184,7 +194,7 @@
   <header>
     <div class="title-block">
       <p class="eyebrow">Duty Roster · Settlement</p>
-      <h1>ะบบคำนวณค่าเวร</h1>
+      <h1>ระบบคำนวณค่าเวร</h1>
       <p class="sub">บันทึกเวรที่ "จัด" กับเวรที่ "อยู่จริง" แล้วให้ระบบสรุปยอดต้องจ่ายและค่า ontop ให้อัตโนมัติ</p>
     </div>
     <div class="month-picker">
@@ -204,14 +214,15 @@
     </div>
 
     <div class="upload-box" id="uploadBox">
-      <!-- เอา contenteditable ออก แล้วใส่ onclick ให้เรียกปุ่ม input รูปแทน -->
-      <div class="paste-zone" id="pasteZone" onclick="document.getElementById('imgInput').click()">
-        🖼️ <b>คลิกเพื่อเลือกรูปภาพ</b> หรือกด <b>Ctrl+V</b> วางได้เลย (ลากไฟล์มาปล่อยก็ได้)
+      <!-- ปรับปรุงให้เป็นปุ่มคลิก และรองรับการกด Ctrl+V จากทุกที่ -->
+      <div class="paste-zone" id="pasteZone" tabindex="0">
+        🖼️ <b>คลิกตรงนี้</b> เพื่อเลือกไฟล์ตารางเวร หรือกด <b>Ctrl+V</b> เพื่อวางรูปได้จากทุกที่
+        <div style="font-size: 13px; color: var(--muted); margin-top: 6px; font-weight: normal;">ระบบจะใช้ AI อ่านภาพและเติมข้อมูลลงในตารางให้ทันที</div>
       </div>
       <div class="upload-actions">
         <input type="file" id="imgInput" accept="image/*" hidden>
-        <span class="upload-hint">เติมข้อมูลลงแท็บ <b id="targetTabLabel">เวรตามจัด</b> อัตโนมัติ</span>
-        <span id="uploadStatus" class="upload-status"></span>
+        <span class="upload-hint">ข้อมูลจะถูกเติมลงแท็บ <b id="targetTabLabel" style="color:var(--ink)">เวรตามจัด</b></span>
+        <span id="uploadStatus" class="upload-status">พร้อมอ่านตารางเวร</span>
       </div>
     </div>
 
@@ -258,7 +269,6 @@
     </p>
   </div>
 
-  <footer class="notice">ข้อมูลตารางเวรนี้เป็นข้อมูลที่ใช้ร่วมกัน (shared) — ทุกคนที่เปิดลิงก์นี้จะเห็นและแก้ไขข้อมูลเดียวกัน</footer>
 </div>
 
 <script>
@@ -305,6 +315,13 @@ function emptyState(){
   });
   return s;
 }
+
+// จำลองระบบ Storage กรณีไม่ได้เชื่อม Backend
+window.storage = window.storage || {
+  data: {},
+  get: async (k) => ({ value: window.localStorage.getItem(k) }),
+  set: async (k, v) => window.localStorage.setItem(k, v)
+};
 
 async function loadMonth(){
   daysInMonth = new Date(Number(yearSel.value), Number(monthSel.value), 0).getDate();
@@ -461,11 +478,15 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
 monthSel.addEventListener('change', loadMonth);
 yearSel.addEventListener('change', loadMonth);
 
-// ---- ระบบอัปโหลดรูปภาพที่ปรับปรุงใหม่ให้ทำงานง่ายขึ้น ----
 const pasteZone = document.getElementById('pasteZone');
 const imgInput = document.getElementById('imgInput');
 const uploadStatus = document.getElementById('uploadStatus');
 const clearBtn = document.getElementById('clearBtn');
+
+// ทำให้คลิกที่กล่องแล้วเด้งหน้าต่างเลือกไฟล์
+pasteZone.addEventListener('click', () => {
+  imgInput.click();
+});
 
 function fileToBase64(file){
   return new Promise((resolve, reject)=>{
@@ -476,97 +497,130 @@ function fileToBase64(file){
   });
 }
 
-function setStatus(msg, kind){
-  uploadStatus.textContent = msg;
+function setStatus(msg, kind, loading = false){
+  const loaderHtml = loading ? '<span class="loading-indicator"></span>' : '';
+  uploadStatus.innerHTML = loaderHtml + msg;
   uploadStatus.className = 'upload-status' + (kind ? ' ' + kind : '');
 }
 
 const CODE_TO_VAL = { '0':0, '.':0, 'h':0.5, '1':1, 'H':1.5 };
 
 async function processImageFile(file){
-  setStatus('กำลังอ่านรูปภาพ...', '');
+  setStatus('กำลังให้ AI วิเคราะห์รูปภาพ...', '', true);
   try{
     const base64 = await fileToBase64(file);
     const mediaType = file.type || 'image/jpeg';
-
     const nameList = NAMES.map(n => `"${n}"`).join(', ');
-    const prompt = `นี่คือรูปตารางเวร (duty roster) ภาษาไทย แถวคือชื่อคน คอลัมน์คือวันที่ 1 ถึง N ของเดือน
+    
+    const prompt = `ดึงข้อมูลตารางเวร (duty roster) จากรูปภาพนี้ แถวคือรายชื่อบุคคล และคอลัมน์คือวันที่ในเดือน
+กรุณาวิเคราะห์และตอบกลับมาเป็น JSON ตามรูปแบบที่กำหนดให้เท่านั้น
 
-ให้ตอบเป็น JSON บรรทัดเดียวเท่านั้น ห้ามมีคำอธิบาย ห้ามมี markdown fence รูปแบบต้องเป๊ะแบบนี้:
-{"days":N,"data":{"ส":"<โค้ด N ตัวอักษร>","อ":"...","บ":"...","พง":"...","เพ็ญ":"...","แปง":"...","กิ้ม":"...","หลิว":"...","แนน":"...","ตาล":"..."}}
+กติกาการเข้ารหัสข้อมูลในช่อง "data" (1 ตัวอักษรต่อ 1 วัน ห้ามเว้นวรรค):
+- หากเป็นช่องว่าง หรือไม่มีเวร ให้พิมพ์ "0"
+- หากเป็นครึ่งเวร ให้พิมพ์ "h"
+- หากเป็นเต็มเวร ให้พิมพ์ "1"
+- หากเป็นเวรหนึ่งผลัดครึ่ง ให้พิมพ์ "H"
 
-กติกาการเข้ารหัส 1 ตัวอักษรต่อ 1 วัน (ห้ามมีตัวคั่น เช่น comma หรือช่องว่างระหว่างวัน):
-- ว่าง/ไม่มีเวร ใช้ "0"
-- ครึ่งเวร (½) ใช้ "h"
-- เต็มเวร (1) ใช้ "1"
-- เวรครึ่ง (1½) ใช้ "H"
+รายชื่อเป้าหมายที่ต้องดึง (ให้ใช้ Key เป็นชื่อตามนี้เป๊ะๆ เท่านั้น): ${nameList}
+หากมีชื่อไหนที่ไม่ปรากฏในตาราง ให้กำหนดค่า Value เป็นสายอักขระที่มีแต่เลข "0" ตามจำนวนวันของเดือน
+เดาค่าในช่องว่างหรือช่องที่อ่านยากจากบริบทรอบข้างให้สมเหตุสมผลที่สุด`;
 
-ชื่อที่ต้องดึง (ใช้คีย์ตามนี้เป๊ะ แม้ในรูปสะกดต่างไป เช่น pong=พง, pen=เพ็ญ, kim=กิ้ม): ${nameList}
-ถ้าชื่อไหนไม่มีในรูป ให้ใส่โค้ดเป็น "0" ยาว N ตัว N คือจำนวนวันที่เห็นในรูป (ปกติ 28-31) ถ้าช่องไหนอ่านไม่ชัดให้เดาจากบริบทใกล้เคียงที่สุด ห้ามเว้นชื่อใดไว้`;
+    // ใช้ Gemini 3.1 Flash Vision ผ่าน Canvas Environment แบบมี Structure Output (JSON)
+    const payload = {
+        contents: [
+            {
+                role: "user",
+                parts: [
+                    { text: prompt },
+                    {
+                        inlineData: {
+                            mimeType: mediaType,
+                            data: base64
+                        }
+                    }
+                ]
+            }
+        ],
+        generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: "OBJECT",
+                properties: {
+                    "days": { "type": "INTEGER", "description": "จำนวนคอลัมน์วันทั้งหมดที่ปรากฏในรูปตาราง" },
+                    "data": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "ส": { "type": "STRING", "description": "โค้ดเวรของ ส" },
+                            "อ": { "type": "STRING", "description": "โค้ดเวรของ อ" },
+                            "บ": { "type": "STRING", "description": "โค้ดเวรของ บ" },
+                            "พง": { "type": "STRING", "description": "โค้ดเวรของ พง" },
+                            "เพ็ญ": { "type": "STRING", "description": "โค้ดเวรของ เพ็ญ" },
+                            "แปง": { "type": "STRING", "description": "โค้ดเวรของ แปง" },
+                            "กิ้ม": { "type": "STRING", "description": "โค้ดเวรของ กิ้ม" },
+                            "หลิว": { "type": "STRING", "description": "โค้ดเวรของ หลิว" },
+                            "แนน": { "type": "STRING", "description": "โค้ดเวรของ แนน" },
+                            "ตาล": { "type": "STRING", "description": "โค้ดเวรของ ตาล" }
+                        }
+                    }
+                },
+                required: ["days", "data"]
+            }
+        }
+    };
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6", // ปล่อยไว้ตามการตั้งค่าเดิมของระบบคุณ
-        max_tokens: 1000,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-            { type: "text", text: prompt }
-          ]
-        }]
-      })
+    const apiKey = ""; // API Key is automatically provided by the Canvas environment
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+    const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
     });
 
-    const data = await response.json();
+    const result = await response.json();
 
-    if(data.error){
-      throw new Error('API error: ' + (data.error.message || JSON.stringify(data.error)));
+    if(result.error){
+      throw new Error('API Error: ' + (result.error.message || JSON.stringify(result.error)));
     }
-    if(!data.content || !data.content.length){
-      throw new Error('ไม่ได้รับข้อความตอบกลับจากโมเดล: ' + JSON.stringify(data).slice(0,300));
+    
+    if(!result.candidates || result.candidates.length === 0){
+      throw new Error('ไม่ได้รับข้อความตอบกลับจากระบบ AI');
     }
 
-    const textBlock = data.content.map(b => b.text || '').join('');
-    const cleaned = textBlock.replace(/```json|```/g, '').trim();
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if(!match){
-      throw new Error('ไม่พบ JSON ในคำตอบ: ' + cleaned.slice(0,300));
-    }
-    const parsed = JSON.parse(match[0]);
+    const jsonText = result.candidates[0].content.parts[0].text;
+    const parsed = JSON.parse(jsonText);
 
     const N = Math.min(parsed.days || daysInMonth, daysInMonth);
+    
     NAMES.forEach(name=>{
       const code = (parsed.data && typeof parsed.data[name] === 'string') ? parsed.data[name] : '';
-      for(let i=0;i<daysInMonth;i++){
+      for(let i = 0; i < daysInMonth; i++){
         const ch = i < N ? code[i] : undefined;
+        // ทำการ Assign ค่าและแปลงรหัส
         state[activeTab][name][i] = (ch !== undefined && ch in CODE_TO_VAL) ? CODE_TO_VAL[ch] : 0;
       }
     });
 
+    // รีเฟรชตารางและคำนวณใหม่
     renderGrid();
     renderSummary();
     queueSave();
-    setStatus(`อ่านสำเร็จ — เติมข้อมูล ${N} วันลงแท็บ "${activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง'}" แล้ว`, 'ok');
+    
+    setStatus(`✅ สำเร็จ! เติมข้อมูล ${N} วันลงในแท็บ "${activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง'}" แล้ว`, 'ok');
   } catch(err){
     console.error(err);
-    setStatus('อ่านรูปไม่สำเร็จ: ' + (err.message || err), 'err');
+    setStatus('❌ อ่านรูปไม่สำเร็จ: ' + (err.message || "กรุณาลองใหม่อีกครั้ง"), 'err');
   }
 }
 
+// ฟังก์ชันสำหรับกระพริบกล่องเมื่อรับรูป
 function flashZone(){
   pasteZone.classList.add('paste-active');
-  setTimeout(()=> pasteZone.classList.remove('paste-active'), 400);
+  setTimeout(()=> pasteZone.classList.remove('paste-active'), 300);
 }
 
-// ---- ดักจับเหตุการณ์การกด Ctrl+V วางรูปภาพได้ "ทุกที่" บนหน้าเว็บ ----
-document.addEventListener('paste', (e)=>{
-  // ถ้ายูสเซอร์กำลังพิมพ์ข้อความในกล่อง Input (ถ้ามีในอนาคต) ให้ข้ามไป ไม่ดักการวาง
-  const tag = (document.activeElement && document.activeElement.tagName) || '';
-  if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-
+// จัดการ Event วาง (Paste)
+function handlePasteEvent(e){
   const items = (e.clipboardData && e.clipboardData.items) || [];
   let imageFile = null;
   for(const item of items){
@@ -575,16 +629,23 @@ document.addEventListener('paste', (e)=>{
       break;
     }
   }
+  
+  if(!imageFile) return; // ถ้าไม่ได้ก็อปปี้รูปมา ปล่อยผ่าน
+  
+  e.preventDefault(); // ถ้ารูปมาแล้ว ให้หยุดพฤติกรรมดั้งเดิมไม่ให้รูปถูกแทรกบนหน้าเว็บ
+  flashZone();
+  processImageFile(imageFile);
+}
 
-  // ถ้าที่วางมาเป็นรูปภาพ ให้เริ่มประมวลผลทันที
-  if(imageFile){
-    e.preventDefault();
-    flashZone();
-    processImageFile(imageFile);
-  }
+// ดักจับ Paste จากทุกที่ในหน้าเว็บ
+document.addEventListener('paste', (e)=>{
+  // ถ้ายูสเซอร์กำลังพิมพ์อยู่ในช่อง input อื่นๆ จะไม่กวน
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  handlePasteEvent(e);
 });
 
-// ดักการลากไฟล์ (Drag & Drop)
+// รองรับการลากไฟล์รูปมาวาง (Drag & Drop)
 ['dragover','dragenter'].forEach(evt=>{
   pasteZone.addEventListener(evt, (e)=>{
     e.preventDefault();
@@ -602,15 +663,17 @@ pasteZone.addEventListener('drop', (e)=>{
     flashZone();
     processImageFile(file);
   } else {
-    setStatus('ไฟล์ที่ลากมาไม่ใช่รูปภาพ', 'err');
+    setStatus('❌ ไฟล์ที่ลากมาไม่ใช่รูปภาพ', 'err');
   }
 });
 
-// เลือกรุปจากปุ่มอัปโหลด (ที่ถูกซ่อนไว้ แต่จะเด้งเมื่อคลิกที่พื้นที่ pasteZone)
 imgInput.addEventListener('change', (e)=>{
   const file = e.target.files[0];
-  if(file) processImageFile(file);
-  imgInput.value = ''; // รีเซ็ตเผื่อเลือกรุปเดิมซ้ำ
+  if(file){
+    flashZone();
+    processImageFile(file);
+  }
+  imgInput.value = '';
 });
 
 clearBtn.addEventListener('click', ()=>{
@@ -621,7 +684,7 @@ clearBtn.addEventListener('click', ()=>{
   renderGrid();
   renderSummary();
   queueSave();
-  setStatus(`เคลียร์ตาราง "${tabName}" แล้ว`, 'ok');
+  setStatus(`เคลียร์ตาราง "${tabName}" เรียบร้อยแล้ว`, 'ok');
 });
 
 initSelectors();
