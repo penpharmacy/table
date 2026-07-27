@@ -129,20 +129,17 @@
     background: var(--paper-dim); border-radius:10px;
     padding:14px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px;
   }
+  /* ปรับแต่งส่วนกล่องวางรูปให้รองรับการคลิก */
   .paste-zone{
     font-family:'Inter', sans-serif; font-size:14px; text-align:center; color:var(--ink);
     border:2px dashed var(--brass); border-radius:10px; background:#fff;
-    padding:26px 16px; cursor:text; outline:none; transition: all .15s; line-height:1.6;
+    padding:26px 16px; cursor:pointer; outline:none; transition: all .2s ease; line-height:1.6;
   }
-  .paste-zone:focus{ border-color: var(--ink); background:#FBF7EC; border-style:solid; }
-  .paste-zone.drag-over{ border-color: var(--brass-deep); background:#F3E6C4; border-style:solid; }
+  .paste-zone:hover, .paste-zone:focus{ border-color: var(--ink); background:#FBF7EC; border-style:solid; }
+  .paste-zone.drag-over{ border-color: var(--brass-deep); background:#F3E6C4; border-style:solid; transform: scale(1.01); }
   .paste-zone.paste-active{ border-color: var(--green); background:#E7F1EA; border-style:solid; }
+  
   .upload-actions{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:center; }
-  .upload-link{
-    font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--brass-deep);
-    text-decoration:underline; cursor:pointer; white-space:nowrap;
-  }
-  .upload-link:hover{ color:var(--ink); }
   .upload-hint{ font-size:12.5px; color:var(--muted); }
   .upload-status{ font-size:12.5px; color:var(--muted); font-family:'IBM Plex Mono',monospace; min-height:16px; }
   .upload-status.err{ color:var(--red); }
@@ -207,13 +204,13 @@
     </div>
 
     <div class="upload-box" id="uploadBox">
-      <div class="paste-zone" id="pasteZone" contenteditable="true" spellcheck="false">
-        🖼️ คลิกตรงนี้แล้ว <b>Ctrl+V</b> เพื่อวางรูป — หรือลากรูปมาวางในกรอบนี้ได้เลย
+      <!-- เอา contenteditable ออก แล้วใส่ onclick ให้เรียกปุ่ม input รูปแทน -->
+      <div class="paste-zone" id="pasteZone" onclick="document.getElementById('imgInput').click()">
+        🖼️ <b>คลิกเพื่อเลือกรูปภาพ</b> หรือกด <b>Ctrl+V</b> วางได้เลย (ลากไฟล์มาปล่อยก็ได้)
       </div>
       <div class="upload-actions">
-        <label for="imgInput" class="upload-link">เลือกไฟล์รูปแทน</label>
         <input type="file" id="imgInput" accept="image/*" hidden>
-        <span class="upload-hint">เติมลงแท็บ <b id="targetTabLabel">เวรตามจัด</b> ที่เปิดอยู่ตอนนี้</span>
+        <span class="upload-hint">เติมข้อมูลลงแท็บ <b id="targetTabLabel">เวรตามจัด</b> อัตโนมัติ</span>
         <span id="uploadStatus" class="upload-status"></span>
       </div>
     </div>
@@ -406,7 +403,6 @@ function labelFor(v){
 }
 
 function updateRowTotal(name){
-  // cheap full re-render of grid keeps sums accurate without extra bookkeeping
   renderGrid();
 }
 
@@ -465,9 +461,8 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
 monthSel.addEventListener('change', loadMonth);
 yearSel.addEventListener('change', loadMonth);
 
-// ---- อ่านรูปตารางเวรด้วย Claude แล้วเติมค่าให้อัตโนมัติ (วางจากคลิปบอร์ด หรือเลือกไฟล์) ----
+// ---- ระบบอัปโหลดรูปภาพที่ปรับปรุงใหม่ให้ทำงานง่ายขึ้น ----
 const pasteZone = document.getElementById('pasteZone');
-const pasteZoneDefaultHTML = pasteZone.innerHTML;
 const imgInput = document.getElementById('imgInput');
 const uploadStatus = document.getElementById('uploadStatus');
 const clearBtn = document.getElementById('clearBtn');
@@ -487,7 +482,6 @@ function setStatus(msg, kind){
 }
 
 const CODE_TO_VAL = { '0':0, '.':0, 'h':0.5, '1':1, 'H':1.5 };
-const VAL_TO_CODE  = { 0:'0', 0.5:'h', 1:'1', 1.5:'H' };
 
 async function processImageFile(file){
   setStatus('กำลังอ่านรูปภาพ...', '');
@@ -514,7 +508,7 @@ async function processImageFile(file){
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-6", // ปล่อยไว้ตามการตั้งค่าเดิมของระบบคุณ
         max_tokens: 1000,
         messages: [{
           role: "user",
@@ -562,7 +556,17 @@ async function processImageFile(file){
   }
 }
 
-function handlePasteEvent(e){
+function flashZone(){
+  pasteZone.classList.add('paste-active');
+  setTimeout(()=> pasteZone.classList.remove('paste-active'), 400);
+}
+
+// ---- ดักจับเหตุการณ์การกด Ctrl+V วางรูปภาพได้ "ทุกที่" บนหน้าเว็บ ----
+document.addEventListener('paste', (e)=>{
+  // ถ้ายูสเซอร์กำลังพิมพ์ข้อความในกล่อง Input (ถ้ามีในอนาคต) ให้ข้ามไป ไม่ดักการวาง
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
   const items = (e.clipboardData && e.clipboardData.items) || [];
   let imageFile = null;
   for(const item of items){
@@ -571,34 +575,16 @@ function handlePasteEvent(e){
       break;
     }
   }
-  e.preventDefault();
-  // เคลียร์เนื้อหาที่อาจถูกวางลงใน contenteditable กลับเป็นข้อความเริ่มต้น
-  setTimeout(()=>{ pasteZone.innerHTML = pasteZoneDefaultHTML; }, 0);
 
-  if(!imageFile){
-    setStatus('ไม่พบรูปในคลิปบอร์ด (บางเบราว์เซอร์/มือถืออาจไม่รองรับ ลองใช้ "เลือกไฟล์รูปแทน")', 'err');
-    return;
+  // ถ้าที่วางมาเป็นรูปภาพ ให้เริ่มประมวลผลทันที
+  if(imageFile){
+    e.preventDefault();
+    flashZone();
+    processImageFile(imageFile);
   }
-  flashZone();
-  processImageFile(imageFile);
-}
-
-function flashZone(){
-  pasteZone.classList.add('paste-active');
-  setTimeout(()=> pasteZone.classList.remove('paste-active'), 400);
-}
-
-pasteZone.addEventListener('paste', handlePasteEvent);
-pasteZone.addEventListener('focus', ()=>{
-  // เลือกข้อความทั้งหมดไว้ล่วงหน้า เผื่อบางเบราว์เซอร์แทรกแทนที่แทนวางต่อท้าย
-  const range = document.createRange();
-  range.selectNodeContents(pasteZone);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
 });
 
-// ลากไฟล์รูปมาวางในกรอบได้ด้วย
+// ดักการลากไฟล์ (Drag & Drop)
 ['dragover','dragenter'].forEach(evt=>{
   pasteZone.addEventListener(evt, (e)=>{
     e.preventDefault();
@@ -620,10 +606,11 @@ pasteZone.addEventListener('drop', (e)=>{
   }
 });
 
+// เลือกรุปจากปุ่มอัปโหลด (ที่ถูกซ่อนไว้ แต่จะเด้งเมื่อคลิกที่พื้นที่ pasteZone)
 imgInput.addEventListener('change', (e)=>{
   const file = e.target.files[0];
   if(file) processImageFile(file);
-  imgInput.value = '';
+  imgInput.value = ''; // รีเซ็ตเผื่อเลือกรุปเดิมซ้ำ
 });
 
 clearBtn.addEventListener('click', ()=>{
@@ -635,14 +622,6 @@ clearBtn.addEventListener('click', ()=>{
   renderSummary();
   queueSave();
   setStatus(`เคลียร์ตาราง "${tabName}" แล้ว`, 'ok');
-});
-
-// สำรอง: วางรูปได้แม้ไม่ได้คลิกโฟกัสกล่องไว้ก่อน (ยกเว้นกำลังพิมพ์อยู่ในช่อง input/select อื่น)
-document.addEventListener('paste', (e)=>{
-  if(document.activeElement === pasteZone) return; // pasteZone ดักจัดการเองแล้ว
-  const tag = (document.activeElement && document.activeElement.tagName) || '';
-  if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-  handlePasteEvent(e);
 });
 
 initSelectors();
