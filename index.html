@@ -122,15 +122,18 @@
   .upload-box{
     display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
     background: var(--paper-dim); border:1px dashed var(--brass); border-radius:10px;
-    padding:12px 14px; margin-bottom:14px;
+    padding:12px 14px; margin-bottom:14px; outline:none; transition: background .15s, border-color .15s;
+    cursor:text;
+  }
+  .upload-box:focus, .upload-box.paste-active{
+    border-color: var(--ink); background:#EFE4C6; border-style:solid;
   }
   .upload-left{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   .upload-btn{
-    font-family:'IBM Plex Mono', monospace; font-size:13px; padding:9px 16px; cursor:pointer;
+    font-family:'IBM Plex Mono', monospace; font-size:13px; padding:9px 16px;
     border-radius:8px; background: var(--ink); color:#F7F4EC; border:1px solid var(--ink);
-    white-space:nowrap;
+    white-space:nowrap; user-select:none;
   }
-  .upload-btn:hover{ background: var(--ink-soft); }
   .upload-hint{ font-size:12.5px; color:var(--muted); }
   .upload-status{ font-size:12.5px; color:var(--muted); font-family:'IBM Plex Mono',monospace; min-height:16px; }
   .upload-status.err{ color:var(--red); }
@@ -193,11 +196,10 @@
       <button class="tab-btn" data-tab="actual">เวรอยู่จริง</button>
     </div>
 
-    <div class="upload-box" id="uploadBox">
+    <div class="upload-box" id="uploadBox" tabindex="0">
       <div class="upload-left">
-        <label for="imgInput" class="upload-btn">📷 อัปโหลดรูปตารางเวร</label>
-        <input type="file" id="imgInput" accept="image/*" hidden>
-        <span class="upload-hint">ระบบจะอ่านค่าในรูปแล้วเติมลงแท็บ <b id="targetTabLabel">เวรตามจัด</b> ที่เปิดอยู่ตอนนี้ให้อัตโนมัติ</span>
+        <span class="upload-btn" id="pasteHint">📋 วางรูป (Ctrl+V) ตรงนี้</span>
+        <span class="upload-hint">คัดลอกรูปตารางเวร แล้วกดวางในหน้านี้ — ระบบจะอ่านค่าแล้วเติมลงแท็บ <b id="targetTabLabel">เวรตามจัด</b> ที่เปิดอยู่ตอนนี้ให้อัตโนมัติ</span>
       </div>
       <span id="uploadStatus" class="upload-status"></span>
     </div>
@@ -449,8 +451,8 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
 monthSel.addEventListener('change', loadMonth);
 yearSel.addEventListener('change', loadMonth);
 
-// ---- อ่านรูปตารางเวรด้วย Claude แล้วเติมค่าให้อัตโนมัติ ----
-const imgInput = document.getElementById('imgInput');
+// ---- อ่านรูปตารางเวรด้วย Claude แล้วเติมค่าให้อัตโนมัติ (วางจากคลิปบอร์ด) ----
+const uploadBox = document.getElementById('uploadBox');
 const uploadStatus = document.getElementById('uploadStatus');
 
 function fileToBase64(file){
@@ -467,11 +469,8 @@ function setStatus(msg, kind){
   uploadStatus.className = 'upload-status' + (kind ? ' ' + kind : '');
 }
 
-imgInput.addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
+async function processImageFile(file){
   setStatus('กำลังอ่านรูปภาพ...', '');
-
   try{
     const base64 = await fileToBase64(file);
     const mediaType = file.type || 'image/jpeg';
@@ -521,10 +520,36 @@ imgInput.addEventListener('change', async (e)=>{
     setStatus(`อ่านสำเร็จ — เติมข้อมูล ${N} วันลงแท็บ "${activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง'}" แล้ว`, 'ok');
   } catch(err){
     console.error(err);
-    setStatus('อ่านรูปไม่สำเร็จ ลองถ่ายให้ชัดขึ้นหรือครอปเฉพาะตาราง แล้วลองใหม่', 'err');
-  } finally {
-    imgInput.value = '';
+    setStatus('อ่านรูปไม่สำเร็จ ลองถ่ายให้ชัดขึ้นหรือครอปเฉพาะตาราง แล้ววางใหม่', 'err');
   }
+}
+
+function handlePasteEvent(e){
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  let imageFile = null;
+  for(const item of items){
+    if(item.type && item.type.startsWith('image/')){
+      imageFile = item.getAsFile();
+      break;
+    }
+  }
+  if(!imageFile){
+    setStatus('ไม่พบรูปในคลิปบอร์ด ลองคัดลอกรูปแล้ววางอีกครั้ง', 'err');
+    return;
+  }
+  e.preventDefault();
+  uploadBox.classList.add('paste-active');
+  setTimeout(()=> uploadBox.classList.remove('paste-active'), 400);
+  processImageFile(imageFile);
+}
+
+// วางรูปได้ทั้งตอนโฟกัสกล่องวาง และวางที่ไหนก็ได้ในหน้า (ถ้าไม่ได้กำลังพิมพ์ในช่องอื่น)
+uploadBox.addEventListener('paste', handlePasteEvent);
+document.addEventListener('paste', (e)=>{
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if(document.activeElement === uploadBox) return; // already handled above
+  handlePasteEvent(e);
 });
 
 initSelectors();
