@@ -486,20 +486,29 @@ function setStatus(msg, kind){
   uploadStatus.className = 'upload-status' + (kind ? ' ' + kind : '');
 }
 
+const CODE_TO_VAL = { '0':0, '.':0, 'h':0.5, '1':1, 'H':1.5 };
+const VAL_TO_CODE  = { 0:'0', 0.5:'h', 1:'1', 1.5:'H' };
+
 async function processImageFile(file){
   setStatus('กำลังอ่านรูปภาพ...', '');
   try{
     const base64 = await fileToBase64(file);
     const mediaType = file.type || 'image/jpeg';
 
-    const prompt = `นี่คือรูปตารางเวร (duty roster) ภาษาไทย แถวคือชื่อคน คอลัมน์คือวันที่ 1 ถึง N ของเดือน ค่าในแต่ละช่องเป็นหนึ่งใน: ว่าง/เปล่า (=0), ½ (=0.5), 1, หรือ 1½ (=1.5)
+    const nameList = NAMES.map(n => `"${n}"`).join(', ');
+    const prompt = `นี่คือรูปตารางเวร (duty roster) ภาษาไทย แถวคือชื่อคน คอลัมน์คือวันที่ 1 ถึง N ของเดือน
 
-รายชื่อที่ต้องดึงข้อมูล (ใช้คีย์ภาษาไทยตามนี้เท่านั้น แม้ในรูปจะสะกดต่างไป เช่น pong=พง, pen หรือ เพ็ญ=เพ็ญ, kim=กิ้ม): ส, อ, บ, พง, เพ็ญ, แปง, กิ้ม, หลิว, แนน, ตาล
+ให้ตอบเป็น JSON บรรทัดเดียวเท่านั้น ห้ามมีคำอธิบาย ห้ามมี markdown fence รูปแบบต้องเป๊ะแบบนี้:
+{"days":N,"data":{"ส":"<โค้ด N ตัวอักษร>","อ":"...","บ":"...","พง":"...","เพ็ญ":"...","แปง":"...","กิ้ม":"...","หลิว":"...","แนน":"...","ตาล":"..."}}
 
-ให้ตอบกลับเป็น JSON เท่านั้น ห้ามมีข้อความอื่น ห้ามมี markdown code fence ในรูปแบบนี้เป๊ะ ๆ:
-{"days": N, "data": {"ส": [เลข,เลข,...ยาว N ช่อง], "อ": [...], "บ": [...], "พง": [...], "เพ็ญ": [...], "แปง": [...], "กิ้ม": [...], "หลิว": [...], "แนน": [...], "ตาล": [...]}}
+กติกาการเข้ารหัส 1 ตัวอักษรต่อ 1 วัน (ห้ามมีตัวคั่น เช่น comma หรือช่องว่างระหว่างวัน):
+- ว่าง/ไม่มีเวร ใช้ "0"
+- ครึ่งเวร (½) ใช้ "h"
+- เต็มเวร (1) ใช้ "1"
+- เวรครึ่ง (1½) ใช้ "H"
 
-โดย N คือจำนวนวันที่เห็นในรูป ถ้าชื่อไหนไม่มีในรูปให้ใส่ array เลข 0 ยาว N ช่อง แต่ละค่าต้องเป็น 0, 0.5, 1 หรือ 1.5 เท่านั้น ถ้าช่องไหนอ่านไม่ชัดให้เดาจากบริบทใกล้เคียง`;
+ชื่อที่ต้องดึง (ใช้คีย์ตามนี้เป๊ะ แม้ในรูปสะกดต่างไป เช่น pong=พง, pen=เพ็ญ, kim=กิ้ม): ${nameList}
+ถ้าชื่อไหนไม่มีในรูป ให้ใส่โค้ดเป็น "0" ยาว N ตัว N คือจำนวนวันที่เห็นในรูป (ปกติ 28-31) ถ้าช่องไหนอ่านไม่ชัดให้เดาจากบริบทใกล้เคียงที่สุด ห้ามเว้นชื่อใดไว้`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -518,16 +527,28 @@ async function processImageFile(file){
     });
 
     const data = await response.json();
-    const textBlock = (data.content || []).map(b => b.text || '').join('');
+
+    if(data.error){
+      throw new Error('API error: ' + (data.error.message || JSON.stringify(data.error)));
+    }
+    if(!data.content || !data.content.length){
+      throw new Error('ไม่ได้รับข้อความตอบกลับจากโมเดล: ' + JSON.stringify(data).slice(0,300));
+    }
+
+    const textBlock = data.content.map(b => b.text || '').join('');
     const cleaned = textBlock.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if(!match){
+      throw new Error('ไม่พบ JSON ในคำตอบ: ' + cleaned.slice(0,300));
+    }
+    const parsed = JSON.parse(match[0]);
 
     const N = Math.min(parsed.days || daysInMonth, daysInMonth);
     NAMES.forEach(name=>{
-      const arr = (parsed.data && parsed.data[name]) ? parsed.data[name] : [];
+      const code = (parsed.data && typeof parsed.data[name] === 'string') ? parsed.data[name] : '';
       for(let i=0;i<daysInMonth;i++){
-        const v = i < N ? Number(arr[i]) : 0;
-        state[activeTab][name][i] = [0,0.5,1,1.5].includes(v) ? v : 0;
+        const ch = i < N ? code[i] : undefined;
+        state[activeTab][name][i] = (ch !== undefined && ch in CODE_TO_VAL) ? CODE_TO_VAL[ch] : 0;
       }
     });
 
@@ -537,7 +558,7 @@ async function processImageFile(file){
     setStatus(`อ่านสำเร็จ — เติมข้อมูล ${N} วันลงแท็บ "${activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง'}" แล้ว`, 'ok');
   } catch(err){
     console.error(err);
-    setStatus('อ่านรูปไม่สำเร็จ ลองถ่ายให้ชัดขึ้นหรือครอปเฉพาะตาราง แล้ววางใหม่', 'err');
+    setStatus('อ่านรูปไม่สำเร็จ: ' + (err.message || err), 'err');
   }
 }
 
