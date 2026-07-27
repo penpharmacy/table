@@ -80,7 +80,13 @@
   .card .desc{ color:var(--muted); font-size:13px; margin:0 0 16px; }
 
   /* ---- Tabs ---- */
-  .tabs{ display:flex; gap:6px; margin-bottom:16px; }
+  .tabs{ display:flex; gap:6px; margin-bottom:16px; align-items:center; }
+  .clear-btn{
+    margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:12.5px; padding:8px 14px;
+    border-radius:999px; border:1px solid var(--red); background:#fff; color:var(--red); cursor:pointer;
+    transition: all .15s;
+  }
+  .clear-btn:hover{ background: var(--red); color:#fff; }
   .tab-btn{
     font-family:'IBM Plex Mono', monospace; font-size:13px; padding:9px 16px;
     border-radius: 999px; border:1px solid var(--line); background:#fff; color:var(--muted);
@@ -120,18 +126,18 @@
   tfoot td.name-col{ background:#EFEADE; }
 
   .upload-box{
-    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
-    background: var(--paper-dim); border:1px dashed var(--brass); border-radius:10px;
-    padding:12px 14px; margin-bottom:14px;
+    background: var(--paper-dim); border-radius:10px;
+    padding:14px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px;
   }
-  .upload-left{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   .paste-zone{
-    font-family:'IBM Plex Mono', monospace; font-size:13px; padding:9px 16px;
-    border-radius:8px; background: var(--ink); color:#F7F4EC; border:1px solid var(--ink);
-    white-space:nowrap; cursor:text; outline:none; user-select:text;
+    font-family:'Inter', sans-serif; font-size:14px; text-align:center; color:var(--ink);
+    border:2px dashed var(--brass); border-radius:10px; background:#fff;
+    padding:26px 16px; cursor:text; outline:none; transition: all .15s; line-height:1.6;
   }
-  .paste-zone:focus{ background: var(--brass-deep); border-color:var(--brass-deep); }
-  .paste-zone.paste-active{ background: var(--green); border-color: var(--green); }
+  .paste-zone:focus{ border-color: var(--ink); background:#FBF7EC; border-style:solid; }
+  .paste-zone.drag-over{ border-color: var(--brass-deep); background:#F3E6C4; border-style:solid; }
+  .paste-zone.paste-active{ border-color: var(--green); background:#E7F1EA; border-style:solid; }
+  .upload-actions{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:center; }
   .upload-link{
     font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--brass-deep);
     text-decoration:underline; cursor:pointer; white-space:nowrap;
@@ -197,16 +203,19 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="assigned">เวรตามจัด</button>
       <button class="tab-btn" data-tab="actual">เวรอยู่จริง</button>
+      <button class="clear-btn" id="clearBtn" title="ล้างค่าทั้งหมดในแท็บที่เปิดอยู่">🗑️ เคลียร์ตาราง</button>
     </div>
 
     <div class="upload-box" id="uploadBox">
-      <div class="upload-left">
-        <div class="paste-zone" id="pasteZone" contenteditable="true" spellcheck="false">📋 คลิกตรงนี้แล้ว Ctrl+V เพื่อวางรูป</div>
-        <label for="imgInput" class="upload-link">หรือเลือกไฟล์รูป</label>
-        <input type="file" id="imgInput" accept="image/*" hidden>
-        <span class="upload-hint">เติมลงแท็บ <b id="targetTabLabel">เวรตามจัด</b> ที่เปิดอยู่ตอนนี้ให้อัตโนมัติ</span>
+      <div class="paste-zone" id="pasteZone" contenteditable="true" spellcheck="false">
+        🖼️ คลิกตรงนี้แล้ว <b>Ctrl+V</b> เพื่อวางรูป — หรือลากรูปมาวางในกรอบนี้ได้เลย
       </div>
-      <span id="uploadStatus" class="upload-status"></span>
+      <div class="upload-actions">
+        <label for="imgInput" class="upload-link">เลือกไฟล์รูปแทน</label>
+        <input type="file" id="imgInput" accept="image/*" hidden>
+        <span class="upload-hint">เติมลงแท็บ <b id="targetTabLabel">เวรตามจัด</b> ที่เปิดอยู่ตอนนี้</span>
+        <span id="uploadStatus" class="upload-status"></span>
+      </div>
     </div>
 
     <div class="grid-scroll">
@@ -458,9 +467,10 @@ yearSel.addEventListener('change', loadMonth);
 
 // ---- อ่านรูปตารางเวรด้วย Claude แล้วเติมค่าให้อัตโนมัติ (วางจากคลิปบอร์ด หรือเลือกไฟล์) ----
 const pasteZone = document.getElementById('pasteZone');
-const pasteZoneDefaultText = pasteZone.textContent;
+const pasteZoneDefaultHTML = pasteZone.innerHTML;
 const imgInput = document.getElementById('imgInput');
 const uploadStatus = document.getElementById('uploadStatus');
+const clearBtn = document.getElementById('clearBtn');
 
 function fileToBase64(file){
   return new Promise((resolve, reject)=>{
@@ -542,15 +552,19 @@ function handlePasteEvent(e){
   }
   e.preventDefault();
   // เคลียร์เนื้อหาที่อาจถูกวางลงใน contenteditable กลับเป็นข้อความเริ่มต้น
-  setTimeout(()=>{ pasteZone.textContent = pasteZoneDefaultText; }, 0);
+  setTimeout(()=>{ pasteZone.innerHTML = pasteZoneDefaultHTML; }, 0);
 
   if(!imageFile){
-    setStatus('ไม่พบรูปในคลิปบอร์ด (บางเบราว์เซอร์/มือถืออาจไม่รองรับ ลองใช้ปุ่ม "เลือกไฟล์รูป" แทน)', 'err');
+    setStatus('ไม่พบรูปในคลิปบอร์ด (บางเบราว์เซอร์/มือถืออาจไม่รองรับ ลองใช้ "เลือกไฟล์รูปแทน")', 'err');
     return;
   }
+  flashZone();
+  processImageFile(imageFile);
+}
+
+function flashZone(){
   pasteZone.classList.add('paste-active');
   setTimeout(()=> pasteZone.classList.remove('paste-active'), 400);
-  processImageFile(imageFile);
 }
 
 pasteZone.addEventListener('paste', handlePasteEvent);
@@ -563,10 +577,51 @@ pasteZone.addEventListener('focus', ()=>{
   sel.addRange(range);
 });
 
+// ลากไฟล์รูปมาวางในกรอบได้ด้วย
+['dragover','dragenter'].forEach(evt=>{
+  pasteZone.addEventListener(evt, (e)=>{
+    e.preventDefault();
+    pasteZone.classList.add('drag-over');
+  });
+});
+['dragleave','dragend'].forEach(evt=>{
+  pasteZone.addEventListener(evt, ()=> pasteZone.classList.remove('drag-over'));
+});
+pasteZone.addEventListener('drop', (e)=>{
+  e.preventDefault();
+  pasteZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(file && file.type.startsWith('image/')){
+    flashZone();
+    processImageFile(file);
+  } else {
+    setStatus('ไฟล์ที่ลากมาไม่ใช่รูปภาพ', 'err');
+  }
+});
+
 imgInput.addEventListener('change', (e)=>{
   const file = e.target.files[0];
   if(file) processImageFile(file);
   imgInput.value = '';
+});
+
+clearBtn.addEventListener('click', ()=>{
+  const tabName = activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง';
+  const ok = confirm(`ล้างค่าทั้งหมดในตาราง "${tabName}" ของเดือนนี้ใช่ไหม? (แท็บอีกอันจะไม่ถูกแตะต้อง)`);
+  if(!ok) return;
+  NAMES.forEach(name=>{ state[activeTab][name] = new Array(daysInMonth).fill(0); });
+  renderGrid();
+  renderSummary();
+  queueSave();
+  setStatus(`เคลียร์ตาราง "${tabName}" แล้ว`, 'ok');
+});
+
+// สำรอง: วางรูปได้แม้ไม่ได้คลิกโฟกัสกล่องไว้ก่อน (ยกเว้นกำลังพิมพ์อยู่ในช่อง input/select อื่น)
+document.addEventListener('paste', (e)=>{
+  if(document.activeElement === pasteZone) return; // pasteZone ดักจัดการเองแล้ว
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  handlePasteEvent(e);
 });
 
 initSelectors();
