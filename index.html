@@ -186,6 +186,39 @@
   footer.notice{
     color:#B9C2CE; font-size:12px; text-align:center; margin-top:8px;
   }
+
+  /* ---- Modals ---- */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(27, 42, 65, 0.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .modal-overlay.show { opacity: 1; pointer-events: auto; }
+  .modal-box {
+    background: var(--paper); padding: 24px; border-radius: 14px;
+    width: 90%; max-width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    transform: translateY(20px); transition: transform 0.2s;
+  }
+  .modal-overlay.show .modal-box { transform: translateY(0); }
+  .modal-box h3 { font-family: 'Fraunces', serif; margin: 0 0 10px; font-size:18px; color: var(--ink); }
+  .modal-box p { font-size: 13.5px; color: var(--muted); margin: 0 0 20px; line-height: 1.5; }
+  .modal-input {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 14px; margin-bottom: 20px; outline: none;
+  }
+  .modal-input:focus { border-color: var(--brass); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
+  .modal-btn {
+    padding: 9px 16px; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer;
+    border: none; font-family: 'Inter', sans-serif; transition: background .15s;
+  }
+  .modal-btn.cancel { background: #EFEADE; color: var(--muted); }
+  .modal-btn.cancel:hover { background: #E4DEC9; }
+  .modal-btn.confirm { background: var(--ink); color: #fff; }
+  .modal-btn.confirm:hover { background: var(--ink-soft); }
+  .modal-btn.danger { background: var(--red); color: #fff; }
+  .modal-btn.danger:hover { background: #96422E; }
 </style>
 </head>
 <body>
@@ -210,7 +243,8 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="assigned">เวรตามจัด</button>
       <button class="tab-btn" data-tab="actual">เวรอยู่จริง</button>
-      <button class="clear-btn" id="clearBtn" title="ล้างค่าทั้งหมดในแท็บที่เปิดอยู่">🗑️ เคลียร์ตาราง</button>
+      <button class="tab-btn" id="apiSettingBtn" style="margin-left:auto; border-color:var(--brass); color:var(--brass-deep);">🔑 API Key</button>
+      <button class="clear-btn" id="clearBtn" title="ล้างค่าทั้งหมดในแท็บที่เปิดอยู่" style="margin-left:0;">🗑️ เคลียร์ตาราง</button>
     </div>
 
     <div class="upload-box" id="uploadBox">
@@ -284,6 +318,31 @@
       ถ้าเป็น <span class="pill get">ได้รับ</span> แปลว่าอยู่เวรเกินกว่าที่จัดไว้ ควรได้รับเงินชดเชย<br>
       <b>ontop</b> คือยอดเงินที่ รพ. จ่ายให้ตามช่องที่ "อยู่จริง" จริง ๆ ตามอัตรา <code>0.5 = 480฿ · 1 = 1,000฿ · 1.5 = 1,480฿</code>
     </p>
+  </div>
+
+  <!-- API Key Modal -->
+  <div class="modal-overlay" id="apiModal">
+    <div class="modal-box">
+      <h3>ตั้งค่า Gemini API Key</h3>
+      <p>หากโหลดไฟล์นี้ไปเปิดใช้งานเองในเครื่อง คุณต้องใส่ API Key เพื่อใช้ AI อ่านตารางเวร (ขอรับฟรีได้ที่ <a href="https://aistudio.google.com" target="_blank" style="color:var(--brass-deep);">aistudio.google.com</a>)</p>
+      <input type="password" class="modal-input" id="apiKeyInput" placeholder="AIzaSy...">
+      <div class="modal-actions">
+        <button class="modal-btn cancel" id="apiCancelBtn">ยกเลิก</button>
+        <button class="modal-btn confirm" id="apiSaveBtn">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Clear Modal -->
+  <div class="modal-overlay" id="clearModal">
+    <div class="modal-box">
+      <h3>ยืนยันการล้างข้อมูล</h3>
+      <p id="clearModalMsg">คุณแน่ใจหรือไม่ที่จะล้างค่าทั้งหมด?</p>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" id="clearCancelBtn">ยกเลิก</button>
+        <button class="modal-btn danger" id="clearConfirmBtn">ล้างข้อมูล</button>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -675,7 +734,7 @@ async function processImageFile(file){
         }
     };
 
-    const apiKey = ""; // API Key is automatically provided by the Canvas environment
+    const apiKey = window.localStorage.getItem('gemini_api_key') || ""; // โหลด API Key จากที่ตั้งค่าไว้
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
@@ -721,7 +780,11 @@ async function processImageFile(file){
     setStatus(`✅ สำเร็จ! เติมข้อมูล ${N} วันลงในแท็บ "${activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง'}" อย่างแม่นยำแล้ว`, 'ok');
   } catch(err){
     console.error(err);
-    setStatus('❌ อ่านรูปไม่สำเร็จ: ' + (err.message || "รูปอาจมีความละเอียดต่ำไป กรุณาลองใหม่อีกครั้ง"), 'err');
+    let errMsg = err.message || "รูปอาจมีความละเอียดต่ำไป กรุณาลองใหม่อีกครั้ง";
+    if(errMsg.includes('Failed to fetch')) {
+      errMsg = "เชื่อมต่อ AI ไม่สำเร็จ (หากนำไฟล์ไปใช้เอง กรุณาคลิกปุ่ม '🔑 API Key' ด้านบนเพื่อตั้งค่าก่อน)";
+    }
+    setStatus('❌ อ่านรูปไม่สำเร็จ: ' + errMsg, 'err');
   }
 }
 
@@ -788,10 +851,36 @@ imgInput.addEventListener('change', (e)=>{
   imgInput.value = '';
 });
 
+// ---- ระบบจัดการ Modal และตั้งค่า API Key ----
+const apiModal = document.getElementById('apiModal');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const apiSettingBtn = document.getElementById('apiSettingBtn');
+
+apiSettingBtn.addEventListener('click', () => {
+  apiKeyInput.value = window.localStorage.getItem('gemini_api_key') || '';
+  apiModal.classList.add('show');
+});
+document.getElementById('apiCancelBtn').addEventListener('click', () => apiModal.classList.remove('show'));
+document.getElementById('apiSaveBtn').addEventListener('click', () => {
+  window.localStorage.setItem('gemini_api_key', apiKeyInput.value.trim());
+  apiModal.classList.remove('show');
+  setStatus('✅ บันทึก API Key เรียบร้อยแล้ว สามารถวางรูปได้เลย', 'ok');
+});
+
+// ---- ระบบยืนยันการเคลียร์ตาราง (เปลี่ยนจากการใช้ confirm เพื่อความสวยงาม) ----
+const clearModal = document.getElementById('clearModal');
+const clearModalMsg = document.getElementById('clearModalMsg');
+
 clearBtn.addEventListener('click', ()=>{
   const tabName = activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง';
-  const ok = confirm(`ล้างค่าทั้งหมดในตาราง "${tabName}" ของเดือนนี้ใช่ไหม? (แท็บอีกอันจะไม่ถูกแตะต้อง)`);
-  if(!ok) return;
+  clearModalMsg.textContent = `ล้างค่าทั้งหมดในตาราง "${tabName}" ของเดือนนี้ใช่ไหม? (แท็บอีกอันจะไม่ถูกแตะต้อง)`;
+  clearModal.classList.add('show');
+});
+
+document.getElementById('clearCancelBtn').addEventListener('click', () => clearModal.classList.remove('show'));
+document.getElementById('clearConfirmBtn').addEventListener('click', () => {
+  clearModal.classList.remove('show');
+  const tabName = activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง';
   NAMES.forEach(name=>{ state[activeTab][name] = new Array(daysInMonth).fill(0); });
   renderGrid();
   renderSummary();
