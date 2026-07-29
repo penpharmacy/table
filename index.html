@@ -701,12 +701,44 @@ function setStatus(msg, kind, loading = false){
 const CODE_TO_VAL = { '0':0, 'o':0, 'O':0, '-':0, '.':0, 'x':0, 'X':0, 'h':0.5, '1':1, 'H':1.5 };
 
 async function processImageFile(file){
-  setStatus('กำลังวิเคราะห์โครงสร้างตารางด้วย AI ระดับ Pro (อาจใช้เวลา 5-10 วินาที)...', '', true);
+  setStatus('กำลังตรวจสอบโมเดล AI ที่พร้อมใช้งาน...', '', true);
   try{
+    const apiKey = window.localStorage.getItem('gemini_api_key') || "";
+    if(!apiKey) {
+       throw new Error("กรุณาระบุ API Key ก่อน (คลิกที่ปุ่ม '🔑 API Key' ด้านบน)");
+    }
+
     const base64 = await compressImageToBase64(file);
     const mediaType = 'image/jpeg';
     
-    // ปรับ Prompt ให้บังคับส่งกลับเป็น Array ตามจำนวนวัน เพื่อป้องกันการอ่านข้ามช่องว่าง (Shift) 100%
+    // 1. ตรวจสอบว่า API Key นี้มีโมเดลอะไรให้ใช้บ้าง
+    const modelRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    const modelData = await modelRes.json();
+    if (modelData.error) throw new Error("ตรวจสอบ API Key: " + modelData.error.message);
+    
+    // กรองเอาเฉพาะ gemini ที่รองรับการอ่านภาพและบังคับ JSON (รุ่น 1.5 หรือ 2.0 ขึ้นไป)
+    const availableModels = modelData.models.filter(m => 
+        m.supportedGenerationMethods && 
+        m.supportedGenerationMethods.includes('generateContent') &&
+        (m.name.includes('gemini-1.5') || m.name.includes('gemini-2.0') || m.name.includes('gemini-exp'))
+    );
+    
+    if (availableModels.length === 0) {
+      throw new Error("API Key นี้ไม่พบโมเดล Gemini รุ่นที่รองรับการอ่านตาราง");
+    }
+    
+    // เลือกโมเดลที่ดีที่สุดตามลำดับ (Pro > Flash)
+    let bestModel = availableModels.find(m => m.name.includes('gemini-2.5-pro')) ||
+                    availableModels.find(m => m.name.includes('gemini-2.0-pro')) ||
+                    availableModels.find(m => m.name.includes('gemini-1.5-pro')) ||
+                    availableModels.find(m => m.name.includes('gemini-2.0-flash')) ||
+                    availableModels.find(m => m.name.includes('gemini-1.5-flash')) ||
+                    availableModels[0];
+                    
+    const modelDisplayName = bestModel.displayName || bestModel.name.replace('models/', '');
+    setStatus(`กำลังวิเคราะห์ตารางด้วย ${modelDisplayName} (อาจใช้เวลา 5-10 วินาที)...`, '', true);
+
+    // 2. ส่งข้อมูลไปวิเคราะห์
     const prompt = `ภารกิจ: สกัดข้อมูลตารางเวร (Duty Roster)
 คอลัมน์แรกคือ "ชื่อบุคคล" คอลัมน์ถัดๆไปคือ "วันที่" (1 ถึง 31)
 
@@ -734,7 +766,7 @@ async function processImageFile(file){
             }
         ],
         generationConfig: {
-            temperature: 0.1, // ใช้ค่าความร้อนต่ำสุดเพื่อให้ AI โฟกัสกับข้อมูลเชิงตรรกะแบบเป๊ะๆ
+            temperature: 0.1,
             responseMimeType: "application/json",
             responseSchema: {
                 type: "OBJECT",
@@ -760,34 +792,15 @@ async function processImageFile(file){
         }
     };
 
-    const apiKey = window.localStorage.getItem('gemini_api_key') || "";
-    if(!apiKey) {
-       throw new Error("กรุณาระบุ API Key ก่อน (คลิกที่ปุ่ม '🔑 API Key' ด้านบน) เพื่อเปิดใช้งาน AI");
-    }
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/${bestModel.name}:generateContent?key=${apiKey}`;
 
-    let apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${apiKey}`;
-
-    let response = await fetch(apiUrl, {
+    const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
 
-    let result = await response.json();
-
-    // ระบบ Fallback: หาก API Key ไม่รองรับรุ่น Pro ให้สลับไปใช้ Flash อัตโนมัติ
-    if(result.error && (result.error.message.includes('not found') || result.error.code === 404)) {
-        console.warn("ไม่พบโมเดล Pro, กำลังสลับไปใช้ Gemini 1.5 Flash แทน...");
-        setStatus('กำลังวิเคราะห์โครงสร้างตารางด้วย AI ระดับ Flash...', '', true);
-        
-        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-        response = await fetch(fallbackUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        result = await response.json();
-    }
+    const result = await response.json();
 
     if(result.error){
       throw new Error('API Error: ' + (result.error.message || JSON.stringify(result.error)));
@@ -813,7 +826,6 @@ async function processImageFile(file){
           for (let i = 0; i < daysInMonth; i++) {
             if (i < arr.length) {
               let val = arr[i];
-              // กรองและอนุญาตเฉพาะค่าที่ถูกต้อง
               if (val === 0.5 || val === 1 || val === 1.5) {
                 state[activeTab][name][i] = val;
               }
@@ -827,13 +839,16 @@ async function processImageFile(file){
     renderSummary();
     queueSave();
     
-    setStatus(`✅ สำเร็จ! เติมข้อมูลลงในแท็บ "${activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง'}" อย่างแม่นยำแล้ว`, 'ok');
+    setStatus(`✅ สำเร็จ! เติมข้อมูลผ่านโมเดล ${modelDisplayName} อย่างแม่นยำแล้ว`, 'ok');
   } catch(err){
     console.error(err);
     let errMsg = err.message || "รูปอาจมีความละเอียดต่ำเกินไป หรือเซิร์ฟเวอร์ AI ทำงานหนัก";
-    if(errMsg.includes('Failed to fetch') || errMsg.includes('API Key')) {
-      errMsg = "ไม่สามารถเชื่อมต่อ AI ได้ (กรุณาคลิกปุ่ม '🔑 API Key' เพื่อใส่รหัสก่อนใช้งาน)";
+    
+    // แปลงข้อความแจ้งเตือนกรณี API Key โควต้าเต็ม ให้เข้าใจง่ายขึ้น
+    if (errMsg.toLowerCase().includes('quota exceeded') || errMsg.includes('429')) {
+      errMsg = "โควต้าการอ่านรูปของ API Key นี้เต็ม (บัญชีฟรีจำกัดจำนวนครั้ง) กรุณารอสัก 1-2 นาทีแล้ววางรูปใหม่ หรือเปลี่ยนไปใช้ API Key อื่น";
     }
+
     setStatus('❌ ' + errMsg, 'err');
   }
 }
