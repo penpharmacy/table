@@ -312,6 +312,24 @@
         <td id="totOntop">0</td>
       </tr></tfoot>
     </table>
+
+    <!-- ส่วนสรุปยอดแยกกลุ่มพิเศษที่เพิ่มใหม่ -->
+    <div style="margin-top: 24px; padding-top: 20px; border-top: 1px dashed var(--brass);">
+      <h3 style="font-family:'Fraunces', serif; font-size:15px; margin:0 0 12px; color:var(--ink);">สรุปยอดแยกกลุ่ม</h3>
+      <table class="summary" style="background:var(--paper-dim); border-radius:8px; overflow:hidden;">
+        <tbody>
+          <tr>
+            <td style="text-align:left;"><b>เพ็ญ + หลิว + แนน</b> (ได้รับสุทธิรวม)</td>
+            <td id="groupGet" class="ontop-val" style="color:var(--green); font-size:15px;">0฿</td>
+          </tr>
+          <tr>
+            <td style="text-align:left;"><b>ยอดรวมที่ต้องจ่ายชดเชย</b> (จากทุกคนที่ขาดเวร)</td>
+            <td id="groupPay" class="ontop-val" style="color:var(--red); font-size:15px;">0฿</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
     <p class="rates-note" style="margin-top:16px">
       <b>ยอดสุทธิ</b> คำนวณจากอัตรากลาง <code>0.5 = 150฿ · 1 = 300฿ · 1.5 = 450฿</code> (ตามช่องที่จัด ลบ ช่องที่อยู่จริง) —
       ถ้าเป็น <span class="pill pay">ต้องจ่าย</span> แปลว่าจัดเวรไว้แต่มีคนอื่นอยู่แทน ต้องจ่ายชดเชยให้คนที่อยู่แทน
@@ -506,6 +524,9 @@ function renderSummary(){
   let rows = '';
   let specialRows = '';
   let totA=0, totC=0, totDiff=0, totSettle=0, totOntop=0;
+  
+  let penHliwNanGet = 0;
+  let totalPay = 0;
 
   // 1. ตรวจสอบกรณีพิเศษ (เพ็ญ แทน กิ้ม/แปง)
   let specialCases = [];
@@ -587,6 +608,14 @@ function renderSummary(){
 
     totA += assignedSum; totC += actualSum; totDiff += diff; totSettle += settle; totOntop += ontop;
 
+    // คำนวณยอดแยกกลุ่ม (เพ็ญ หลิว แนน ได้รับรวมเท่าไหร่ | ทุกคนจ่ายรวมเท่าไหร่)
+    if (settle < 0 && ['เพ็ญ', 'หลิว', 'แนน'].includes(name)) {
+      penHliwNanGet += Math.abs(settle);
+    }
+    if (settle > 0) {
+      totalPay += settle;
+    }
+
     let pillClass = 'zero', pillText = '0฿';
     if(settle > 0){ pillClass='pay'; pillText = `ต้องจ่าย ${settle.toLocaleString()}฿`; }
     else if(settle < 0){ pillClass='get'; pillText = `ได้รับ ${Math.abs(settle).toLocaleString()}฿`; }
@@ -607,6 +636,9 @@ function renderSummary(){
   document.getElementById('totDiff').textContent = totDiff.toFixed(1);
   document.getElementById('totSettle').textContent = totSettle.toLocaleString()+'฿';
   document.getElementById('totOntop').textContent = totOntop.toLocaleString()+'฿';
+
+  document.getElementById('groupGet').textContent = penHliwNanGet.toLocaleString() + '฿';
+  document.getElementById('groupPay').textContent = totalPay.toLocaleString() + '฿';
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn=>{
@@ -633,13 +665,13 @@ pasteZone.addEventListener('click', () => {
 });
 
 // เพิ่มระบบบีบอัดภาพเพื่อความรวดเร็วในการส่งข้อมูลให้ AI อัปโหลดได้ไวขึ้น
-function compressImageToBase64(file, maxWidth = 2000) {
+function compressImageToBase64(file, maxWidth = 3000) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       let w = img.width;
       let h = img.height;
-      // ย่อขนาดรูปที่ใหญ่เกินไปให้ประมวลผลเร็วขึ้น
+      // ขยายขนาด maxWidth เป็น 3000 เพื่อรักษาความคมชัดของเส้นตารางให้ AI อ่านง่าย
       if (w > maxWidth) {
         h = Math.round((maxWidth / w) * h);
         w = maxWidth;
@@ -648,8 +680,11 @@ function compressImageToBase64(file, maxWidth = 2000) {
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext('2d');
+      // เติมสีพื้นหลังเป็นสีขาว ป้องกันกรณีภาพที่ก๊อปปี้มาเป็นพื้นหลังโปร่งใส (Transparent)
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      resolve(canvas.toDataURL('image/jpeg', 0.9).split(',')[1]);
     };
     img.onerror = () => reject(new Error('อ่านไฟล์รูปไม่สำเร็จ'));
     img.src = URL.createObjectURL(file);
@@ -666,32 +701,23 @@ function setStatus(msg, kind, loading = false){
 const CODE_TO_VAL = { '0':0, 'o':0, 'O':0, '-':0, '.':0, 'x':0, 'X':0, 'h':0.5, '1':1, 'H':1.5 };
 
 async function processImageFile(file){
-  setStatus('กำลังอ่านและวิเคราะห์ตารางด้วย AI อย่างละเอียด...', '', true);
+  setStatus('กำลังวิเคราะห์โครงสร้างตารางด้วย AI ระดับ Pro (อาจใช้เวลา 5-10 วินาที)...', '', true);
   try{
     const base64 = await compressImageToBase64(file);
     const mediaType = 'image/jpeg';
-    const nameList = NAMES.map(n => `"${n}"`).join(', ');
     
-    const prompt = `ภารกิจ: สกัดข้อมูลจากตารางเวร (Duty Roster) ด้วยความแม่นยำสูงสุด 100%
-- แถวคือรายชื่อบุคคล
-- คอลัมน์คือวันที่ (เรียงจาก 1 ถึงวันสิ้นเดือน ปกติมี 28, 29, 30 หรือ 31 คอลัมน์)
+    // ปรับ Prompt ให้บังคับส่งกลับเป็น Array ตามจำนวนวัน เพื่อป้องกันการอ่านข้ามช่องว่าง (Shift) 100%
+    const prompt = `ภารกิจ: สกัดข้อมูลตารางเวร (Duty Roster)
+คอลัมน์แรกคือ "ชื่อบุคคล" คอลัมน์ถัดๆไปคือ "วันที่" (1 ถึง 31)
 
-รายชื่อที่ต้องสกัดข้อมูล (เทียบเคียงชื่อในรูปที่สะกดใกล้เคียงกับคำเหล่านี้): ${nameList}
+คุณต้องอ่านข้อมูล "ทีละช่อง" และ "ทีละคอลัมน์" จากซ้ายไปขวาให้ครบทุกวันอย่างเคร่งครัด
+รายชื่อเป้าหมายที่ต้องหาคือ: ส, อ, บ, พง, เพ็ญ, แปง, กิ้ม, หลิว, แนน, ตาล (ในรูปอาจเขียนสะกดต่างออกไป เช่น pong=พง, kim=กิ้ม, pen=เพ็ญ ให้อ้างอิงเป็นภาษาไทยตามคีย์นี้)
 
-กติกาการสร้าง Code สำหรับแต่ละคน (สร้างเป็นอักขระ 1 ตัว ต่อ 1 วัน ติดกันไปเลย ห้ามเว้นวรรค):
-1. ช่องว่าง / หยุด / ออฟ / ลา / ขีด / กากบาท / ไม่มีค่าตัวเลข = ใช้ "0"
-2. ครึ่งเวร (เช่น 0.5, ครึ่งบ่าย, ครึ่งเช้า, 4 ชม.) = ใช้ "h"
-3. เต็มเวร (เช่น 1, เช้า, บ่าย, ดึก, 8 ชม.) = ใช้ "1"
-4. เวรควบ (เช่น 1.5, 12 ชม., เช้า+บ่าย) = ใช้ "H"
+*กฎข้อบังคับที่สำคัญที่สุด*:
+1. ห้ามข้ามคอลัมน์เด็ดขาด! คุณต้องนับช่องว่าง (ช่องที่ไม่มีตัวเลข) เป็น 0 เพื่อรักษาตำแหน่งและพิกัดวันที่ให้ตรงกับหัวตารางเป๊ะๆ
+2. ค่าของเวรมีเพียง 0.5, 1, หรือ 1.5 เท่านั้น (ช่องว่างคือ 0)
+3. ผลลัพธ์ต้องเป็น Array ของตัวเลขเรียงตามวัน (เช่น วันที่ 1 ถึง 31) สำหรับทุกคน ถ้าช่องไหนไม่มีเวรให้ใส่ 0`;
 
-ข้อบังคับที่ต้องทำตามอย่างเคร่งครัด:
-- ตอบกลับมาเป็น JSON ตาม Schema ที่กำหนดเท่านั้น ห้ามมีคำอธิบายอื่น
-- นับคอลัมน์ "วันที่" ให้แม่นยำ ว่าตารางมีกี่วัน (ตัวแปร days)
-- Code ตัวอักษรของทุกคน ต้องมีความยาวเท่ากับจำนวน days พอดีเป๊ะ ห้ามขาดหรือเกิน
-- ดูให้แน่ใจว่าคอลัมน์วันที่ตรงกับช่องตารางเวรของบุคคลนั้นจริงๆ
-- หากรายชื่อใดในโจทย์ไม่มีปรากฏในรูปเลย ให้ระบุค่าเป็น String "0" ที่ยาวเท่ากับ days`;
-
-    // ใช้ Gemini 3.1 Flash Vision ผ่าน Canvas Environment แบบมี Structure Output (JSON)
     const payload = {
         contents: [
             {
@@ -708,42 +734,60 @@ async function processImageFile(file){
             }
         ],
         generationConfig: {
+            temperature: 0.1, // ใช้ค่าความร้อนต่ำสุดเพื่อให้ AI โฟกัสกับข้อมูลเชิงตรรกะแบบเป๊ะๆ
             responseMimeType: "application/json",
             responseSchema: {
                 type: "OBJECT",
                 properties: {
-                    "days": { "type": "INTEGER", "description": "จำนวนคอลัมน์วันทั้งหมดที่ปรากฏในรูปตาราง" },
-                    "data": {
+                    "records": {
                         "type": "OBJECT",
                         "properties": {
-                            "ส": { "type": "STRING" },
-                            "อ": { "type": "STRING" },
-                            "บ": { "type": "STRING" },
-                            "พง": { "type": "STRING" },
-                            "เพ็ญ": { "type": "STRING" },
-                            "แปง": { "type": "STRING" },
-                            "กิ้ม": { "type": "STRING" },
-                            "หลิว": { "type": "STRING" },
-                            "แนน": { "type": "STRING" },
-                            "ตาล": { "type": "STRING" }
+                            "ส": { "type": "ARRAY", "items": { "type": "NUMBER" } },
+                            "อ": { "type": "ARRAY", "items": { "type": "NUMBER" } },
+                            "บ": { "type": "ARRAY", "items": { "type": "NUMBER" } },
+                            "พง": { "type": "ARRAY", "items": { "type": "NUMBER" } },
+                            "เพ็ญ": { "type": "ARRAY", "items": { "type": "NUMBER" } },
+                            "แปง": { "type": "ARRAY", "items": { "type": "NUMBER" } },
+                            "กิ้ม": { "type": "ARRAY", "items": { "type": "NUMBER" } },
+                            "หลิว": { "type": "ARRAY", "items": { "type": "NUMBER" } },
+                            "แนน": { "type": "ARRAY", "items": { "type": "NUMBER" } },
+                            "ตาล": { "type": "ARRAY", "items": { "type": "NUMBER" } }
                         }
                     }
                 },
-                required: ["days", "data"]
+                required: ["records"]
             }
         }
     };
 
-    const apiKey = window.localStorage.getItem('gemini_api_key') || ""; // โหลด API Key จากที่ตั้งค่าไว้
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+    const apiKey = window.localStorage.getItem('gemini_api_key') || "";
+    if(!apiKey) {
+       throw new Error("กรุณาระบุ API Key ก่อน (คลิกที่ปุ่ม '🔑 API Key' ด้านบน) เพื่อเปิดใช้งาน AI");
+    }
 
-    const response = await fetch(apiUrl, {
+    let apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${apiKey}`;
+
+    let response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
 
-    const result = await response.json();
+    let result = await response.json();
+
+    // ระบบ Fallback: หาก API Key ไม่รองรับรุ่น Pro ให้สลับไปใช้ Flash อัตโนมัติ
+    if(result.error && (result.error.message.includes('not found') || result.error.code === 404)) {
+        console.warn("ไม่พบโมเดล Pro, กำลังสลับไปใช้ Gemini 1.5 Flash แทน...");
+        setStatus('กำลังวิเคราะห์โครงสร้างตารางด้วย AI ระดับ Flash...', '', true);
+        
+        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        response = await fetch(fallbackUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        result = await response.json();
+    }
 
     if(result.error){
       throw new Error('API Error: ' + (result.error.message || JSON.stringify(result.error)));
@@ -756,35 +800,41 @@ async function processImageFile(file){
     const jsonText = result.candidates[0].content.parts[0].text;
     const parsed = JSON.parse(jsonText);
 
-    const N = Math.min(parsed.days || daysInMonth, daysInMonth);
-    
-    NAMES.forEach(name=>{
-      let code = (parsed.data && typeof parsed.data[name] === 'string') ? parsed.data[name] : '';
-      
-      // ตรวจสอบและซ่อมแซมความยาว String อัตโนมัติ (ป้องกัน AI ส่งข้อมูลขาดหรือเกิน ทำให้ช่องเบี้ยว)
-      if (code.length < N) code = code.padEnd(N, '0');
-      if (code.length > N) code = code.slice(0, N);
-
-      for(let i = 0; i < daysInMonth; i++){
-        const ch = i < N ? code[i] : undefined;
-        // ทำการ Assign ค่าและแปลงรหัส พร้อมตรวจสอบความถูกต้อง
-        state[activeTab][name][i] = (ch !== undefined && CODE_TO_VAL.hasOwnProperty(ch)) ? CODE_TO_VAL[ch] : 0;
-      }
+    // ล้างข้อมูลเดิมในแท็บปัจจุบัน
+    NAMES.forEach(name => {
+      state[activeTab][name] = new Array(daysInMonth).fill(0);
     });
 
-    // รีเฟรชตารางและคำนวณใหม่
+    // หยอดข้อมูลจาก Array ลงตารางทีละวัน
+    if (parsed.records) {
+      NAMES.forEach(name => {
+        if (parsed.records[name] && Array.isArray(parsed.records[name])) {
+          const arr = parsed.records[name];
+          for (let i = 0; i < daysInMonth; i++) {
+            if (i < arr.length) {
+              let val = arr[i];
+              // กรองและอนุญาตเฉพาะค่าที่ถูกต้อง
+              if (val === 0.5 || val === 1 || val === 1.5) {
+                state[activeTab][name][i] = val;
+              }
+            }
+          }
+        }
+      });
+    }
+
     renderGrid();
     renderSummary();
     queueSave();
     
-    setStatus(`✅ สำเร็จ! เติมข้อมูล ${N} วันลงในแท็บ "${activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง'}" อย่างแม่นยำแล้ว`, 'ok');
+    setStatus(`✅ สำเร็จ! เติมข้อมูลลงในแท็บ "${activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง'}" อย่างแม่นยำแล้ว`, 'ok');
   } catch(err){
     console.error(err);
-    let errMsg = err.message || "รูปอาจมีความละเอียดต่ำไป กรุณาลองใหม่อีกครั้ง";
-    if(errMsg.includes('Failed to fetch')) {
-      errMsg = "เชื่อมต่อ AI ไม่สำเร็จ (หากนำไฟล์ไปใช้เอง กรุณาคลิกปุ่ม '🔑 API Key' ด้านบนเพื่อตั้งค่าก่อน)";
+    let errMsg = err.message || "รูปอาจมีความละเอียดต่ำเกินไป หรือเซิร์ฟเวอร์ AI ทำงานหนัก";
+    if(errMsg.includes('Failed to fetch') || errMsg.includes('API Key')) {
+      errMsg = "ไม่สามารถเชื่อมต่อ AI ได้ (กรุณาคลิกปุ่ม '🔑 API Key' เพื่อใส่รหัสก่อนใช้งาน)";
     }
-    setStatus('❌ อ่านรูปไม่สำเร็จ: ' + errMsg, 'err');
+    setStatus('❌ ' + errMsg, 'err');
   }
 }
 
