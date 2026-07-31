@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -143,17 +143,31 @@
   .upload-status{ font-size:13px; color:var(--muted); font-family:'IBM Plex Mono',monospace; font-weight: 500; }
   .upload-status.err{ color:var(--red); }
   .upload-status.ok{ color:var(--green); }
-  .loading-indicator {
-    display: inline-block;
-    width: 12px; height: 12px;
-    border: 2px solid var(--brass);
-    border-radius: 50%;
-    border-top-color: transparent;
-    animation: spin 1s linear infinite;
-    margin-right: 6px;
-    vertical-align: middle;
+
+  /* ---- Floating Image Panel ---- */
+  .floating-panel {
+    position: fixed; top: 20px; right: 20px; width: 400px; background: #fff;
+    border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); z-index: 1000;
+    display: none; flex-direction: column; overflow: hidden; border: 1px solid var(--brass);
+    resize: both;
   }
-  @keyframes spin { 100% { transform: rotate(360deg); } }
+  .floating-header {
+    background: var(--ink); color: #fff; padding: 10px 14px; display: flex;
+    justify-content: space-between; align-items: center; cursor: grab; font-size: 13px; font-weight: 600;
+  }
+  .floating-header:active { cursor: grabbing; }
+  .close-float-btn {
+    background: transparent; border: none; color: #fff; cursor: pointer;
+    font-size: 16px; line-height: 1; padding: 4px; transition: color 0.2s;
+  }
+  .close-float-btn:hover { color: var(--red); }
+  .floating-content {
+    padding: 0; background: var(--paper-dim); overflow: auto; height: 300px;
+    display: flex; align-items: flex-start; justify-content: flex-start;
+  }
+  .floating-content img {
+    max-width: none; cursor: zoom-in; transform-origin: top left; transition: transform 0.2s ease;
+  }
 
   .legend{ display:flex; gap:14px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--muted); }
   .legend span{ display:inline-flex; align-items:center; gap:6px; }
@@ -203,11 +217,6 @@
   .modal-overlay.show .modal-box { transform: translateY(0); }
   .modal-box h3 { font-family: 'Fraunces', serif; margin: 0 0 10px; font-size:18px; color: var(--ink); }
   .modal-box p { font-size: 13.5px; color: var(--muted); margin: 0 0 20px; line-height: 1.5; }
-  .modal-input {
-    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
-    font-family: 'IBM Plex Mono', monospace; font-size: 14px; margin-bottom: 20px; outline: none;
-  }
-  .modal-input:focus { border-color: var(--brass); }
   .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
   .modal-btn {
     padding: 9px 16px; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer;
@@ -226,7 +235,7 @@
 
   <header>
     <div class="title-block">
-      <p class="eyebrow">Duty Roster · Settlement</p>
+      <p class="eyebrow">Duty Roster · Settlement (Offline Mode)</p>
       <h1>ระบบคำนวณค่าเวร</h1>
       <p class="sub">บันทึกเวรที่ "จัด" กับเวรที่ "อยู่จริง" แล้วให้ระบบสรุปยอดต้องจ่ายและค่า ontop ให้อัตโนมัติ</p>
     </div>
@@ -243,20 +252,42 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="assigned">เวรตามจัด</button>
       <button class="tab-btn" data-tab="actual">เวรอยู่จริง</button>
-      <button class="tab-btn" id="apiSettingBtn" style="margin-left:auto; border-color:var(--brass); color:var(--brass-deep);">🔑 API Key</button>
-      <button class="clear-btn" id="clearBtn" title="ล้างค่าทั้งหมดในแท็บที่เปิดอยู่" style="margin-left:0;">🗑️ เคลียร์ตาราง</button>
+      <!-- นำปุ่ม API Key ออก เพราะเราทำงานออฟไลน์ 100% แล้ว -->
+      <button class="clear-btn" id="clearBtn" title="ล้างค่าทั้งหมดในแท็บที่เปิดอยู่" style="margin-left:auto;">🗑️ เคลียร์ตาราง</button>
     </div>
 
     <div class="upload-box" id="uploadBox">
-      <!-- ปรับปรุงให้เป็นปุ่มคลิก และรองรับการกด Ctrl+V จากทุกที่ -->
-      <div class="paste-zone" id="pasteZone" tabindex="0">
-        🖼️ <b>คลิกตรงนี้</b> เพื่อเลือกไฟล์ตารางเวร หรือกด <b>Ctrl+V</b> เพื่อวางรูปได้จากทุกที่
-        <div style="font-size: 13px; color: var(--muted); margin-top: 6px; font-weight: normal;">ระบบจะใช้ AI อ่านภาพและเติมข้อมูลลงในตารางให้ทันที</div>
+      <div class="paste-zone" id="pasteZone" tabindex="0" style="padding: 20px 16px;">
+        <div style="margin-bottom: 14px; font-size: 15px;">
+          <b>วิธีนำเข้าข้อมูล (ทำงานออฟไลน์):</b> กด <kbd style="background:#eee; padding:3px 8px; border-radius:4px; border:1px solid #ccc; font-family:sans-serif;">Ctrl</kbd> + <kbd style="background:#eee; padding:3px 8px; border-radius:4px; border:1px solid #ccc; font-family:sans-serif;">V</kbd> เพื่อวางข้อมูลได้เลย!
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+           <button id="btnClickExcel" class="tab-btn" style="background:#fff; color:var(--green); border-color:var(--green);">📋 ก๊อปปี้ Excel แล้วคลิกที่นี่</button>
+           <button id="btnClickUpload" class="tab-btn" style="background:#fff; color:var(--ink); border-color:var(--ink);">🖼️ เลือกรูปภาพ</button>
+        </div>
+        <div style="font-size: 13px; color: var(--muted); margin-top: 14px; font-weight: normal; line-height:1.6; text-align: left; background: rgba(0,0,0,0.02); padding: 8px 12px; border-radius: 8px;">
+          <b>📋 ก๊อปปี้จาก Excel:</b> ระบบจะดึงตัวเลขลงตารางให้อัตโนมัติทันที 100%<br>
+          <b>🖼️ ก๊อปปี้รูปภาพ:</b> ระบบจะแสดงรูปภาพเป็น <u>"หน้าต่างช่วยมอง"</u> บนหน้าจอ เพื่อให้คุณดูรูปเทียบแล้วคลิกช่องตารางได้สะดวกขึ้น (ออฟไลน์ 100%)
+        </div>
       </div>
       <div class="upload-actions">
         <input type="file" id="imgInput" accept="image/*" hidden>
         <span class="upload-hint">ข้อมูลจะถูกเติมลงแท็บ <b id="targetTabLabel" style="color:var(--ink)">เวรตามจัด</b></span>
-        <span id="uploadStatus" class="upload-status">พร้อมอ่านตารางเวร</span>
+        <span id="uploadStatus" class="upload-status">พร้อมรับข้อมูล Excel หรือ รูปภาพ</span>
+      </div>
+    </div>
+
+    <!-- Floating Window สำหรับดูรูปภาพแบบออฟไลน์ -->
+    <div class="floating-panel" id="floatingImgPanel">
+      <div class="floating-header" id="floatingImgHeader">
+        <span>🖼️ รูปภาพอ้างอิง (ลากย้ายได้)</span>
+        <button class="close-float-btn" id="closeFloatingBtn">✖</button>
+      </div>
+      <div class="floating-content" id="floatingImgContent">
+        <img id="floatingImgPreview" src="" alt="Preview">
+      </div>
+      <div style="padding: 8px; font-size: 11px; color: var(--muted); background: #fff; text-align: center; border-top: 1px solid var(--line);">
+        คลิกที่รูปเพื่อซูมเข้า/ออก - ดูเทียบแล้วคลิกในตารางได้เลย
       </div>
     </div>
 
@@ -298,8 +329,8 @@
           <th>รวมที่จัด</th>
           <th>รวมอยู่จริง</th>
           <th>ผลต่าง (ช่อง)</th>
-          <th>ยอดสุทธิ</th>
-          <th>ontop (จากอยู่จริง)</th>
+          <th>ontop</th>
+          <th>OT</th>
         </tr>
       </thead>
       <tbody id="summaryBody"></tbody>
@@ -331,24 +362,11 @@
     </div>
 
     <p class="rates-note" style="margin-top:16px">
-      <b>ยอดสุทธิ</b> คำนวณจากอัตรากลาง <code>0.5 = 150฿ · 1 = 300฿ · 1.5 = 450฿</code> (ตามช่องที่จัด ลบ ช่องที่อยู่จริง) —
+      <b>ONTOP</b> คำนวณจากอัตรากลาง <code>0.5 = 150฿ · 1 = 300฿ · 1.5 = 450฿</code> (ตามช่องที่จัด ลบ ช่องที่อยู่จริง) —
       ถ้าเป็น <span class="pill pay">ต้องจ่าย</span> แปลว่าจัดเวรไว้แต่มีคนอื่นอยู่แทน ต้องจ่ายชดเชยให้คนที่อยู่แทน
       ถ้าเป็น <span class="pill get">ได้รับ</span> แปลว่าอยู่เวรเกินกว่าที่จัดไว้ ควรได้รับเงินชดเชย<br>
-      <b>ontop</b> คือยอดเงินที่ รพ. จ่ายให้ตามช่องที่ "อยู่จริง" จริง ๆ ตามอัตรา <code>0.5 = 480฿ · 1 = 1,000฿ · 1.5 = 1,480฿</code>
+      <b>OT</b> คือยอดเงินที่ รพ. จ่ายให้ตามช่องที่ "อยู่จริง" จริง ๆ ตามอัตรา <code>0.5 = 480฿ · 1 = 1,000฿ · 1.5 = 1,480฿</code>
     </p>
-  </div>
-
-  <!-- API Key Modal -->
-  <div class="modal-overlay" id="apiModal">
-    <div class="modal-box">
-      <h3>ตั้งค่า Gemini API Key</h3>
-      <p>หากโหลดไฟล์นี้ไปเปิดใช้งานเองในเครื่อง คุณต้องใส่ API Key เพื่อใช้ AI อ่านตารางเวร (ขอรับฟรีได้ที่ <a href="https://aistudio.google.com" target="_blank" style="color:var(--brass-deep);">aistudio.google.com</a>)</p>
-      <input type="password" class="modal-input" id="apiKeyInput" placeholder="AIzaSy...">
-      <div class="modal-actions">
-        <button class="modal-btn cancel" id="apiCancelBtn">ยกเลิก</button>
-        <button class="modal-btn confirm" id="apiSaveBtn">บันทึก</button>
-      </div>
-    </div>
   </div>
 
   <!-- Confirm Clear Modal -->
@@ -538,17 +556,14 @@ function renderSummary(){
     let penAss = state.assigned['เพ็ญ'][d] || 0;
     let penSurplus = penAct - penAss;
 
-    // ถ้าเพ็ญอยู่เวรเกินกว่าที่จัดไว้ในวันนี้
     if(penSurplus > 0){
       ['กิ้ม', 'แปง'].forEach(target => {
         if(penSurplus <= 0) return;
-        
         let act = state.actual[target][d] || 0;
         let ass = state.assigned[target][d] || 0;
-        let deficit = ass - act; // ตรวจสอบว่ากิ้ม/แปง ขาดเวรในวันนี้ไหม
+        let deficit = ass - act; 
         
         if(deficit > 0){
-          // จำนวนกะที่ขึ้นแทนกันจริงๆ (สอดคล้องกันทั้งส่วนขาดและส่วนเกิน)
           let subVal = Math.min(penSurplus, deficit);
           let ontopLoss = ONTOP_RATE[subVal] || 0;
           let settleLoss = SETTLE_RATE[subVal] || 0;
@@ -563,7 +578,6 @@ function renderSummary(){
     }
   }
 
-  // นำข้อมูลกรณีพิเศษมาแสดงในตารางแยก
   if(specialCases.length > 0){
     specialCard.style.display = 'block';
     specialCases.forEach(c => {
@@ -595,20 +609,16 @@ function renderSummary(){
 
     let ontop = actualArr.reduce((acc,v)=> acc + (ONTOP_RATE[v]||0), 0);
 
-    // นำยอดหักลบกรณีพิเศษมาอัปเดตในผลลัพธ์ของแต่ละคน
     if(name === 'เพ็ญ'){
       ontop -= penOntopDeduct;
-      // ยอด settle เดิมติดลบ (แปลว่าได้รับ) การบวกค่ากลับเข้าไป ทำให้ยอดได้รับน้อยลงตามเงื่อนไข
       settle += penSettleDeduct; 
     }
     if(name === 'กิ้ม' || name === 'แปง'){
-      // ยอด settle เดิมเป็นบวก (แปลว่าต้องจ่าย) การลบค่าออก ทำให้ยอดที่ต้องจ่ายลดลง
       settle -= deductSettle[name];
     }
 
     totA += assignedSum; totC += actualSum; totDiff += diff; totSettle += settle; totOntop += ontop;
 
-    // คำนวณยอดแยกกลุ่ม (เพ็ญ หลิว แนน ได้รับรวมเท่าไหร่ | ทุกคนจ่ายรวมเท่าไหร่)
     if (settle < 0 && ['เพ็ญ', 'หลิว', 'แนน'].includes(name)) {
       penHliwNanGet += Math.abs(settle);
     }
@@ -642,8 +652,10 @@ function renderSummary(){
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn=>{
+  if (btn.id === 'btnClickUpload' || btn.id === 'btnClickExcel') return;
   btn.addEventListener('click', ()=>{
-    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    if (btn.classList.contains('clear-btn')) return;
+    document.querySelectorAll('.tabs .tab-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     activeTab = btn.dataset.tab;
     document.getElementById('targetTabLabel').textContent = activeTab === 'assigned' ? 'เวรตามจัด' : 'เวรอยู่จริง';
@@ -658,239 +670,184 @@ const pasteZone = document.getElementById('pasteZone');
 const imgInput = document.getElementById('imgInput');
 const uploadStatus = document.getElementById('uploadStatus');
 const clearBtn = document.getElementById('clearBtn');
+const btnClickUpload = document.getElementById('btnClickUpload');
+const btnClickExcel = document.getElementById('btnClickExcel');
 
-// ทำให้คลิกที่กล่องแล้วเด้งหน้าต่างเลือกไฟล์
-pasteZone.addEventListener('click', () => {
-  imgInput.click();
+// UI หน้าต่างรูปลอย
+const floatingPanel = document.getElementById('floatingImgPanel');
+const floatingImgHeader = document.getElementById('floatingImgHeader');
+const closeFloatingBtn = document.getElementById('closeFloatingBtn');
+const floatingImgPreview = document.getElementById('floatingImgPreview');
+
+// ปิดหน้าต่างรูปลอย
+closeFloatingBtn.addEventListener('click', () => {
+  floatingPanel.style.display = 'none';
 });
 
-// เพิ่มระบบบีบอัดภาพเพื่อความรวดเร็วในการส่งข้อมูลให้ AI อัปโหลดได้ไวขึ้น
-function compressImageToBase64(file, maxWidth = 3000) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      let w = img.width;
-      let h = img.height;
-      // ขยายขนาด maxWidth เป็น 3000 เพื่อรักษาความคมชัดของเส้นตารางให้ AI อ่านง่าย
-      if (w > maxWidth) {
-        h = Math.round((maxWidth / w) * h);
-        w = maxWidth;
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      // เติมสีพื้นหลังเป็นสีขาว ป้องกันกรณีภาพที่ก๊อปปี้มาเป็นพื้นหลังโปร่งใส (Transparent)
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, w, h);
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', 0.9).split(',')[1]);
-    };
-    img.onerror = () => reject(new Error('อ่านไฟล์รูปไม่สำเร็จ'));
-    img.src = URL.createObjectURL(file);
-  });
+// ฟังก์ชันซูมรูปเมื่อคลิก
+let isZoomed = false;
+floatingImgPreview.addEventListener('click', () => {
+  isZoomed = !isZoomed;
+  floatingImgPreview.style.transform = isZoomed ? 'scale(2)' : 'scale(1)';
+});
+
+// ฟังก์ชันลากหน้าต่าง (Drag & Drop Floating Window)
+let isDragging = false;
+let currentX;
+let currentY;
+let initialX;
+let initialY;
+let xOffset = 0;
+let yOffset = 0;
+
+floatingImgHeader.addEventListener("mousedown", dragStart);
+document.addEventListener("mouseup", dragEnd);
+document.addEventListener("mousemove", drag);
+
+function dragStart(e) {
+  initialX = e.clientX - xOffset;
+  initialY = e.clientY - yOffset;
+  if (e.target === floatingImgHeader || e.target.parentNode === floatingImgHeader) {
+    isDragging = true;
+  }
 }
-
-function setStatus(msg, kind, loading = false){
-  const loaderHtml = loading ? '<span class="loading-indicator"></span>' : '';
-  uploadStatus.innerHTML = loaderHtml + msg;
-  uploadStatus.className = 'upload-status' + (kind ? ' ' + kind : '');
+function dragEnd(e) {
+  initialX = currentX;
+  initialY = currentY;
+  isDragging = false;
 }
-
-// เพิ่มการดักจับตัวอักษรที่ AI อาจแปลความหมายผิดพลาดให้กลายเป็น 0 ป้องกันตารางเบี้ยว
-const CODE_TO_VAL = { '0':0, 'o':0, 'O':0, '-':0, '.':0, 'x':0, 'X':0, 'h':0.5, '1':1, 'H':1.5 };
-
-async function processImageFile(file){
-  setStatus('กำลังตรวจสอบโมเดล AI ที่พร้อมใช้งาน...', '', true);
-  try{
-    const apiKey = window.localStorage.getItem('gemini_api_key') || "";
-    if(!apiKey) {
-       throw new Error("กรุณาระบุ API Key ก่อน (คลิกที่ปุ่ม '🔑 API Key' ด้านบน)");
-    }
-
-    const base64 = await compressImageToBase64(file);
-    const mediaType = 'image/jpeg';
-    
-    // 1. ตรวจสอบว่า API Key นี้มีโมเดลอะไรให้ใช้บ้าง
-    const modelRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    const modelData = await modelRes.json();
-    if (modelData.error) throw new Error("ตรวจสอบ API Key: " + modelData.error.message);
-    
-    // กรองเอาเฉพาะ gemini ที่รองรับการอ่านภาพและบังคับ JSON (รุ่น 1.5 หรือ 2.0 ขึ้นไป)
-    const availableModels = modelData.models.filter(m => 
-        m.supportedGenerationMethods && 
-        m.supportedGenerationMethods.includes('generateContent') &&
-        (m.name.includes('gemini-1.5') || m.name.includes('gemini-2.0') || m.name.includes('gemini-exp'))
-    );
-    
-    if (availableModels.length === 0) {
-      throw new Error("API Key นี้ไม่พบโมเดล Gemini รุ่นที่รองรับการอ่านตาราง");
-    }
-    
-    // เลือกโมเดลที่ดีที่สุดตามลำดับ (Pro > Flash)
-    let bestModel = availableModels.find(m => m.name.includes('gemini-2.5-pro')) ||
-                    availableModels.find(m => m.name.includes('gemini-2.0-pro')) ||
-                    availableModels.find(m => m.name.includes('gemini-1.5-pro')) ||
-                    availableModels.find(m => m.name.includes('gemini-2.0-flash')) ||
-                    availableModels.find(m => m.name.includes('gemini-1.5-flash')) ||
-                    availableModels[0];
-                    
-    const modelDisplayName = bestModel.displayName || bestModel.name.replace('models/', '');
-    setStatus(`กำลังวิเคราะห์ตารางด้วย ${modelDisplayName} (อาจใช้เวลา 5-10 วินาที)...`, '', true);
-
-    // 2. ส่งข้อมูลไปวิเคราะห์
-    const prompt = `ภารกิจ: สกัดข้อมูลตารางเวร (Duty Roster)
-คอลัมน์แรกคือ "ชื่อบุคคล" คอลัมน์ถัดๆไปคือ "วันที่" (1 ถึง 31)
-
-คุณต้องอ่านข้อมูล "ทีละช่อง" และ "ทีละคอลัมน์" จากซ้ายไปขวาให้ครบทุกวันอย่างเคร่งครัด
-รายชื่อเป้าหมายที่ต้องหาคือ: ส, อ, บ, พง, เพ็ญ, แปง, กิ้ม, หลิว, แนน, ตาล (ในรูปอาจเขียนสะกดต่างออกไป เช่น pong=พง, kim=กิ้ม, pen=เพ็ญ ให้อ้างอิงเป็นภาษาไทยตามคีย์นี้)
-
-*กฎข้อบังคับที่สำคัญที่สุด*:
-1. ห้ามข้ามคอลัมน์เด็ดขาด! คุณต้องนับช่องว่าง (ช่องที่ไม่มีตัวเลข) เป็น 0 เพื่อรักษาตำแหน่งและพิกัดวันที่ให้ตรงกับหัวตารางเป๊ะๆ
-2. ค่าของเวรมีเพียง 0.5, 1, หรือ 1.5 เท่านั้น (ช่องว่างคือ 0)
-3. ผลลัพธ์ต้องเป็น Array ของตัวเลขเรียงตามวัน (เช่น วันที่ 1 ถึง 31) สำหรับทุกคน ถ้าช่องไหนไม่มีเวรให้ใส่ 0`;
-
-    const payload = {
-        contents: [
-            {
-                role: "user",
-                parts: [
-                    { text: prompt },
-                    {
-                        inlineData: {
-                            mimeType: mediaType,
-                            data: base64
-                        }
-                    }
-                ]
-            }
-        ],
-        generationConfig: {
-            temperature: 0.1,
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: "OBJECT",
-                properties: {
-                    "records": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "ส": { "type": "ARRAY", "items": { "type": "NUMBER" } },
-                            "อ": { "type": "ARRAY", "items": { "type": "NUMBER" } },
-                            "บ": { "type": "ARRAY", "items": { "type": "NUMBER" } },
-                            "พง": { "type": "ARRAY", "items": { "type": "NUMBER" } },
-                            "เพ็ญ": { "type": "ARRAY", "items": { "type": "NUMBER" } },
-                            "แปง": { "type": "ARRAY", "items": { "type": "NUMBER" } },
-                            "กิ้ม": { "type": "ARRAY", "items": { "type": "NUMBER" } },
-                            "หลิว": { "type": "ARRAY", "items": { "type": "NUMBER" } },
-                            "แนน": { "type": "ARRAY", "items": { "type": "NUMBER" } },
-                            "ตาล": { "type": "ARRAY", "items": { "type": "NUMBER" } }
-                        }
-                    }
-                },
-                required: ["records"]
-            }
-        }
-    };
-
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/${bestModel.name}:generateContent?key=${apiKey}`;
-
-    const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-
-    const result = await response.json();
-
-    if(result.error){
-      throw new Error('API Error: ' + (result.error.message || JSON.stringify(result.error)));
-    }
-    
-    if(!result.candidates || result.candidates.length === 0){
-      throw new Error('ไม่ได้รับข้อความตอบกลับจากระบบ AI');
-    }
-
-    const jsonText = result.candidates[0].content.parts[0].text;
-    const parsed = JSON.parse(jsonText);
-
-    // ล้างข้อมูลเดิมในแท็บปัจจุบัน
-    NAMES.forEach(name => {
-      state[activeTab][name] = new Array(daysInMonth).fill(0);
-    });
-
-    // หยอดข้อมูลจาก Array ลงตารางทีละวัน
-    if (parsed.records) {
-      NAMES.forEach(name => {
-        if (parsed.records[name] && Array.isArray(parsed.records[name])) {
-          const arr = parsed.records[name];
-          for (let i = 0; i < daysInMonth; i++) {
-            if (i < arr.length) {
-              let val = arr[i];
-              if (val === 0.5 || val === 1 || val === 1.5) {
-                state[activeTab][name][i] = val;
-              }
-            }
-          }
-        }
-      });
-    }
-
-    renderGrid();
-    renderSummary();
-    queueSave();
-    
-    setStatus(`✅ สำเร็จ! เติมข้อมูลผ่านโมเดล ${modelDisplayName} อย่างแม่นยำแล้ว`, 'ok');
-  } catch(err){
-    console.error(err);
-    let errMsg = err.message || "รูปอาจมีความละเอียดต่ำเกินไป หรือเซิร์ฟเวอร์ AI ทำงานหนัก";
-    
-    // แปลงข้อความแจ้งเตือนกรณี API Key โควต้าเต็ม ให้เข้าใจง่ายขึ้น
-    if (errMsg.toLowerCase().includes('quota exceeded') || errMsg.includes('429')) {
-      errMsg = "โควต้าการอ่านรูปของ API Key นี้เต็ม (บัญชีฟรีจำกัดจำนวนครั้ง) กรุณารอสัก 1-2 นาทีแล้ววางรูปใหม่ หรือเปลี่ยนไปใช้ API Key อื่น";
-    }
-
-    setStatus('❌ ' + errMsg, 'err');
+function drag(e) {
+  if (isDragging) {
+    e.preventDefault();
+    currentX = e.clientX - initialX;
+    currentY = e.clientY - initialY;
+    xOffset = currentX;
+    yOffset = currentY;
+    floatingPanel.style.transform = "translate3d(" + currentX + "px, " + currentY + "px, 0)";
   }
 }
 
-// ฟังก์ชันสำหรับกระพริบกล่องเมื่อรับรูป
+// ผูกปุ่มเลือกไฟล์รูปภาพ
+btnClickUpload.addEventListener('click', () => { imgInput.click(); });
+
+// ผูกปุ่มดึงข้อมูล Excel จากคลิปบอร์ด
+btnClickExcel.addEventListener('click', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text && text.trim().length > 0) {
+      processExcelPaste(text);
+    } else {
+      setStatus('❌ ไม่พบข้อมูลข้อความในคลิปบอร์ด (กรุณาก๊อปปี้ตารางจาก Excel ก่อน)', 'err');
+    }
+  } catch (err) {
+    setStatus('❌ เบราว์เซอร์ไม่อนุญาตให้อ่านอัตโนมัติ กรุณากดปุ่ม Ctrl+V (หรือ Cmd+V) แทน', 'err');
+  }
+});
+
+function setStatus(msg, kind){
+  uploadStatus.innerHTML = msg;
+  uploadStatus.className = 'upload-status' + (kind ? ' ' + kind : '');
+}
+
 function flashZone(){
   pasteZone.classList.add('paste-active');
   setTimeout(()=> pasteZone.classList.remove('paste-active'), 300);
 }
 
+// แปลผลข้อมูลตาราง Excel / Google Sheets (ออฟไลน์ 100%)
+function processExcelPaste(text) {
+  const rows = text.trim().split('\n');
+  let dataUpdated = false;
+
+  const parseVal = (v) => {
+    if(!v) return 0;
+    let val = v.toString().trim().toLowerCase();
+    if(val === '0.5' || val === '1/2' || val === 'h' || val === '½' || val === 'ครึ่ง') return 0.5;
+    if(val === '1' || val === '1.0' || val === 'เต็ม') return 1;
+    if(val === '1.5' || val === '1 1/2' || val === '1½' || val === 'h+') return 1.5;
+    return 0; 
+  };
+
+  for(let r of rows) {
+    const cells = r.split('\t'); 
+    if(cells.length < 2) continue; 
+
+    let rawName = cells[0].trim();
+    if(rawName.toLowerCase() === 'pong') rawName = 'พง';
+    if(rawName.toLowerCase() === 'pen') rawName = 'เพ็ญ';
+    if(rawName.toLowerCase() === 'kim') rawName = 'กิ้ม';
+
+    const exactMatch = NAMES.find(n => n === rawName);
+    if(exactMatch) {
+      for(let i = 0; i < daysInMonth && (i+1) < cells.length; i++) {
+        state[activeTab][exactMatch][i] = parseVal(cells[i+1]);
+      }
+      dataUpdated = true;
+    }
+  }
+
+  if(dataUpdated) {
+    renderGrid();
+    renderSummary();
+    queueSave();
+    flashZone();
+    setStatus(`✅ ดึงข้อมูล Excel ลงตารางสำเร็จ! (ทำงานออฟไลน์)`, 'ok');
+  } else {
+    setStatus('❌ ไม่พบข้อมูล (คอลัมน์ซ้ายสุดที่ก๊อปมาต้องเป็นชื่อ เช่น ส, เพ็ญ)', 'err');
+  }
+}
+
+// นำรูปภาพมาแสดงเป็นหน้าต่างลอยแทนการส่งเข้า AI (ออฟไลน์ 100%)
+function displayImageReference(file) {
+  const objectUrl = URL.createObjectURL(file);
+  floatingImgPreview.src = objectUrl;
+  
+  // รีเซ็ตการซูมและตำแหน่งหน้าต่าง
+  floatingImgPreview.style.transform = 'scale(1)';
+  isZoomed = false;
+  xOffset = 0; yOffset = 0;
+  floatingPanel.style.transform = "translate3d(0px, 0px, 0)";
+  floatingPanel.style.display = 'flex';
+  
+  flashZone();
+  setStatus('🖼️ เปิดรูปภาพอ้างอิงแล้ว คุณสามารถดูรูปและคลิกกรอกตารางได้เลย (ออฟไลน์)', 'ok');
+}
+
 // จัดการ Event วาง (Paste)
-function handlePasteEvent(e){
+function handlePasteEvent(e) {
+  const pastedText = e.clipboardData.getData('text/plain');
+  const isExcelData = pastedText && pastedText.includes('\t');
+  
+  if (isExcelData) {
+    e.preventDefault();
+    processExcelPaste(pastedText);
+    return;
+  }
+
   const items = (e.clipboardData && e.clipboardData.items) || [];
   let imageFile = null;
-  for(const item of items){
-    if(item.type && item.type.startsWith('image/')){
+  for (const item of items) {
+    if (item.type && item.type.startsWith('image/')) {
       imageFile = item.getAsFile();
       break;
     }
   }
   
-  if(!imageFile) return; // ถ้าไม่ได้ก็อปปี้รูปมา ปล่อยผ่าน
-  
-  e.preventDefault(); // ถ้ารูปมาแล้ว ให้หยุดพฤติกรรมดั้งเดิมไม่ให้รูปถูกแทรกบนหน้าเว็บ
-  flashZone();
-  processImageFile(imageFile);
+  if (imageFile) {
+    e.preventDefault(); 
+    displayImageReference(imageFile); 
+  }
 }
 
-// ดักจับ Paste จากทุกที่ในหน้าเว็บ
 document.addEventListener('paste', (e)=>{
-  // ถ้ายูสเซอร์กำลังพิมพ์อยู่ในช่อง input อื่นๆ จะไม่กวน
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
   handlePasteEvent(e);
 });
 
-// รองรับการลากไฟล์รูปมาวาง (Drag & Drop)
+// Drag & Drop
 ['dragover','dragenter'].forEach(evt=>{
-  pasteZone.addEventListener(evt, (e)=>{
-    e.preventDefault();
-    pasteZone.classList.add('drag-over');
-  });
+  pasteZone.addEventListener(evt, (e)=>{ e.preventDefault(); pasteZone.classList.add('drag-over'); });
 });
 ['dragleave','dragend'].forEach(evt=>{
   pasteZone.addEventListener(evt, ()=> pasteZone.classList.remove('drag-over'));
@@ -900,8 +857,7 @@ pasteZone.addEventListener('drop', (e)=>{
   pasteZone.classList.remove('drag-over');
   const file = e.dataTransfer.files && e.dataTransfer.files[0];
   if(file && file.type.startsWith('image/')){
-    flashZone();
-    processImageFile(file);
+    displayImageReference(file);
   } else {
     setStatus('❌ ไฟล์ที่ลากมาไม่ใช่รูปภาพ', 'err');
   }
@@ -909,30 +865,11 @@ pasteZone.addEventListener('drop', (e)=>{
 
 imgInput.addEventListener('change', (e)=>{
   const file = e.target.files[0];
-  if(file){
-    flashZone();
-    processImageFile(file);
-  }
+  if(file){ displayImageReference(file); }
   imgInput.value = '';
 });
 
-// ---- ระบบจัดการ Modal และตั้งค่า API Key ----
-const apiModal = document.getElementById('apiModal');
-const apiKeyInput = document.getElementById('apiKeyInput');
-const apiSettingBtn = document.getElementById('apiSettingBtn');
-
-apiSettingBtn.addEventListener('click', () => {
-  apiKeyInput.value = window.localStorage.getItem('gemini_api_key') || '';
-  apiModal.classList.add('show');
-});
-document.getElementById('apiCancelBtn').addEventListener('click', () => apiModal.classList.remove('show'));
-document.getElementById('apiSaveBtn').addEventListener('click', () => {
-  window.localStorage.setItem('gemini_api_key', apiKeyInput.value.trim());
-  apiModal.classList.remove('show');
-  setStatus('✅ บันทึก API Key เรียบร้อยแล้ว สามารถวางรูปได้เลย', 'ok');
-});
-
-// ---- ระบบยืนยันการเคลียร์ตาราง (เปลี่ยนจากการใช้ confirm เพื่อความสวยงาม) ----
+// เคลียร์ตาราง
 const clearModal = document.getElementById('clearModal');
 const clearModalMsg = document.getElementById('clearModalMsg');
 
