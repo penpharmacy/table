@@ -1,5 +1,4 @@
 
-<html lang="th">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -303,8 +302,8 @@
   </div>
 
   <div class="card" id="specialCard" style="display:none;">
-    <h2>กรณีพิเศษ: เพ็ญแทนกิ้ม/แปง</h2>
-    <p class="desc">ระบบตรวจพบว่า "เพ็ญ" อยู่เวรแทน "กิ้ม" หรือ "แปง" ในวันเดียวกัน จะไม่คิดค่า ontop และหักลดยอดจ่ายชดเชยออก</p>
+    <h2>กรณีพิเศษ: เพ็ญแทนกิ้ม/แปง/พง</h2>
+    <p class="desc">ระบบตรวจพบว่า "เพ็ญ" อยู่เวรแทน "กิ้ม", "แปง" หรือ "พง" ในวันเดียวกัน จะไม่คิดค่า ontop และหักลดยอดจ่ายชดเชยออก</p>
     <table class="summary">
       <thead>
         <tr>
@@ -329,7 +328,8 @@
           <th>รวมที่จัด</th>
           <th>รวมอยู่จริง</th>
           <th>ผลต่าง (ช่อง)</th>
-          <th>ontop</th>
+          <th>ontop (ก่อนหัก)</th>
+          <th>ontop (สุทธิ)</th>
           <th>OT</th>
         </tr>
       </thead>
@@ -339,6 +339,7 @@
         <td id="totAssigned">0</td>
         <td id="totActual">0</td>
         <td id="totDiff">0</td>
+        <td id="totRawSettle">0</td>
         <td id="totSettle">0</td>
         <td id="totOntop">0</td>
       </tr></tfoot>
@@ -541,15 +542,19 @@ function renderSummary(){
   const specialBody = document.getElementById('specialBody');
   let rows = '';
   let specialRows = '';
-  let totA=0, totC=0, totDiff=0, totSettle=0, totOntop=0;
+  let totA=0, totC=0, totDiff=0, totSettle=0, totRawSettle=0, totOntop=0;
   
   let penHliwNanGet = 0;
   let totalPay = 0;
 
-  // 1. ตรวจสอบกรณีพิเศษ (เพ็ญ แทน กิ้ม/แปง)
+  // คำนวณยอดรวมที่จัดและอยู่จริงของพงล่วงหน้า สำหรับเงื่อนไขพิเศษ
+  const pongAssignedSum = state.assigned['พง'].reduce((a,b)=>a+b,0);
+  const pongActualSum = state.actual['พง'].reduce((a,b)=>a+b,0);
+
+  // 1. ตรวจสอบกรณีพิเศษ (เพ็ญ แทน กิ้ม/แปง/พง)
   let specialCases = [];
   let penOntopDeduct = 0, penSettleDeduct = 0;
-  let deductSettle = { 'กิ้ม': 0, 'แปง': 0 };
+  let deductSettle = { 'กิ้ม': 0, 'แปง': 0, 'พง': 0 }; // เพิ่ม พง
 
   for(let d=0; d<daysInMonth; d++){
     let penAct = state.actual['เพ็ญ'][d] || 0;
@@ -557,8 +562,13 @@ function renderSummary(){
     let penSurplus = penAct - penAss;
 
     if(penSurplus > 0){
-      ['กิ้ม', 'แปง'].forEach(target => {
+      ['กิ้ม', 'แปง', 'พง'].forEach(target => { // เพิ่ม พง ลงในลูป
         if(penSurplus <= 0) return;
+        
+        // ถ้าเป็น "พง" และมีเวรอยู่จริง (> 0) จะข้ามการคิดกรณีพิเศษ
+        // เพื่อให้พงจ่ายค่าเวรตามผลต่างสุทธิ (เช่น ขาด 0.5 จ่าย 150) และไม่ถูกนำไปหักลบจนกลายเป็นได้รับเงิน
+        if (target === 'พง' && pongActualSum > 0) return;
+
         let act = state.actual[target][d] || 0;
         let ass = state.assigned[target][d] || 0;
         let deficit = ass - act; 
@@ -605,19 +615,20 @@ function renderSummary(){
 
     let assignedMoney = assignedArr.reduce((acc,v)=> acc + (SETTLE_RATE[v]||0), 0);
     let actualMoney = actualArr.reduce((acc,v)=> acc + (SETTLE_RATE[v]||0), 0);
-    let settle = assignedMoney - actualMoney;
+    let rawSettle = assignedMoney - actualMoney;
+    let settle = rawSettle;
 
     let ontop = actualArr.reduce((acc,v)=> acc + (ONTOP_RATE[v]||0), 0);
 
     if(name === 'เพ็ญ'){
-      ontop -= penOntopDeduct;
       settle += penSettleDeduct; 
     }
-    if(name === 'กิ้ม' || name === 'แปง'){
+    if(name === 'กิ้ม' || name === 'แปง' || name === 'พง'){ // เพิ่ม พง เพื่อหักลดยอดจ่าย
       settle -= deductSettle[name];
     }
 
-    totA += assignedSum; totC += actualSum; totDiff += diff; totSettle += settle; totOntop += ontop;
+    totA += assignedSum; totC += actualSum; totDiff += diff; 
+    totRawSettle += rawSettle; totSettle += settle; totOntop += ontop;
 
     if (settle < 0 && ['เพ็ญ', 'หลิว', 'แนน'].includes(name)) {
       penHliwNanGet += Math.abs(settle);
@@ -625,6 +636,10 @@ function renderSummary(){
     if (settle > 0) {
       totalPay += settle;
     }
+
+    let rawPillClass = 'zero', rawPillText = '0฿';
+    if(rawSettle > 0){ rawPillClass='pay'; rawPillText = `ต้องจ่าย ${rawSettle.toLocaleString()}฿`; }
+    else if(rawSettle < 0){ rawPillClass='get'; rawPillText = `ได้รับ ${Math.abs(rawSettle).toLocaleString()}฿`; }
 
     let pillClass = 'zero', pillText = '0฿';
     if(settle > 0){ pillClass='pay'; pillText = `ต้องจ่าย ${settle.toLocaleString()}฿`; }
@@ -635,6 +650,7 @@ function renderSummary(){
       <td>${assignedSum}</td>
       <td>${actualSum}</td>
       <td>${diff}</td>
+      <td><span class="pill ${rawPillClass}">${rawPillText}</span></td>
       <td><span class="pill ${pillClass}">${pillText}</span></td>
       <td class="ontop-val">${ontop.toLocaleString()}฿</td>
     </tr>`;
@@ -644,6 +660,7 @@ function renderSummary(){
   document.getElementById('totAssigned').textContent = totA;
   document.getElementById('totActual').textContent = totC;
   document.getElementById('totDiff').textContent = totDiff.toFixed(1);
+  document.getElementById('totRawSettle').textContent = totRawSettle.toLocaleString()+'฿';
   document.getElementById('totSettle').textContent = totSettle.toLocaleString()+'฿';
   document.getElementById('totOntop').textContent = totOntop.toLocaleString()+'฿';
 
